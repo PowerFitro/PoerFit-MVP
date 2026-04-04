@@ -31,7 +31,7 @@ async function start() {
       'https://powerfitro.com',
       'https://start.powerfitro.com',
       /\.vercel\.app$/,
-      /localhost/
+      /localhost/,/powerfitro.github.io/
     ],
     methods: ['GET', 'POST', 'OPTIONS'],
     credentials: true
