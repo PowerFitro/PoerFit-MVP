@@ -1,0 +1,297 @@
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_KEY
+);
+
+// ============================================
+// USER PROFILES
+// ============================================
+
+export async function createProfile(data) {
+  const { data: profile, error } = await supabase
+    .from('user_profiles')
+    .insert(data)
+    .select()
+    .single();
+  if (error) throw error;
+  return profile;
+}
+
+export async function getProfileByTelegramId(telegramUserId) {
+  const { data, error } = await supabase
+    .from('user_profiles')
+    .select('*')
+    .eq('telegram_user_id', telegramUserId)
+    .single();
+  if (error && error.code !== 'PGRST116') throw error; // PGRST116 = not found
+  return data;
+}
+
+export async function getProfileByEmail(email) {
+  const { data, error } = await supabase
+    .from('user_profiles')
+    .select('*')
+    .eq('email', email)
+    .single();
+  if (error && error.code !== 'PGRST116') throw error;
+  return data;
+}
+
+export async function updateProfile(userId, updates) {
+  const { data, error } = await supabase
+    .from('user_profiles')
+    .update(updates)
+    .eq('id', userId)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function getAllActiveProfiles() {
+  const { data, error } = await supabase
+    .from('user_profiles')
+    .select('*')
+    .eq('onboarding_completed', true)
+    .eq('program_completed', false)
+    .not('telegram_chat_id', 'is', null);
+  if (error) throw error;
+  return data || [];
+}
+
+export async function getCompletedProfiles() {
+  const { data, error } = await supabase
+    .from('user_profiles')
+    .select('*')
+    .eq('program_completed', true)
+    .not('telegram_chat_id', 'is', null);
+  if (error) throw error;
+  return data || [];
+}
+
+// ============================================
+// DAILY CHECK-INS
+// ============================================
+
+export async function saveCheckin(checkinData) {
+  const { data, error } = await supabase
+    .from('daily_checkins')
+    .upsert(checkinData, { onConflict: 'user_id,checkin_type,checkin_date' })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function getRecentCheckins(userId, days = 7) {
+  const since = new Date();
+  since.setDate(since.getDate() - days);
+  
+  const { data, error } = await supabase
+    .from('daily_checkins')
+    .select('*')
+    .eq('user_id', userId)
+    .gte('checkin_date', since.toISOString().split('T')[0])
+    .order('checkin_date', { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+
+export async function getLastCheckin(userId, type = 'workout') {
+  const { data, error } = await supabase
+    .from('daily_checkins')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('checkin_type', type)
+    .order('checkin_date', { ascending: false })
+    .limit(1)
+    .single();
+  if (error && error.code !== 'PGRST116') throw error;
+  return data;
+}
+
+export async function getCheckinStats(userId) {
+  const { data, error } = await supabase
+    .from('daily_checkins')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('checkin_type', 'workout')
+    .eq('workout_completed', true)
+    .order('checkin_date', { ascending: true });
+  if (error) throw error;
+  
+  const workouts = data || [];
+  const totalWorkouts = workouts.length;
+  const avgDifficulty = workouts.length > 0
+    ? workouts.reduce((sum, w) => sum + (w.difficulty_rating || 3), 0) / workouts.length
+    : 0;
+  
+  return { totalWorkouts, avgDifficulty, workouts };
+}
+
+// ============================================
+// FOOD LOGS
+// ============================================
+
+export async function saveFoodLog(logData) {
+  const { data, error } = await supabase
+    .from('food_logs')
+    .insert(logData)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function getTodayFoodLogs(userId) {
+  const today = new Date().toISOString().split('T')[0];
+  const { data, error } = await supabase
+    .from('food_logs')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('log_date', today);
+  if (error) throw error;
+  return data || [];
+}
+
+// ============================================
+// CONVERSATIONS
+// ============================================
+
+export async function saveMessage(userId, role, content, meta = {}) {
+  const { error } = await supabase
+    .from('conversations')
+    .insert({ user_id: userId, role, content, ...meta });
+  if (error) throw error;
+}
+
+export async function getRecentConversation(userId, limit = 10) {
+  const { data, error } = await supabase
+    .from('conversations')
+    .select('role, content')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data || []).reverse();
+}
+
+// ============================================
+// NOTIFICATIONS
+// ============================================
+
+export async function logNotification(userId, type, channel, content) {
+  const { error } = await supabase
+    .from('notifications_log')
+    .insert({ user_id: userId, notification_type: type, channel, content });
+  if (error) console.error('Notification log error:', error);
+}
+
+export async function wasNotificationSentToday(userId, type) {
+  const today = new Date().toISOString().split('T')[0];
+  const { data, error } = await supabase
+    .from('notifications_log')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('notification_type', type)
+    .gte('created_at', today + 'T00:00:00')
+    .limit(1);
+  if (error) return false;
+  return data && data.length > 0;
+}
+
+// ============================================
+// ESCALATIONS
+// ============================================
+
+export async function createEscalation(userId, reason, context) {
+  const { data, error } = await supabase
+    .from('coach_escalations')
+    .insert({ user_id: userId, reason, context })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function getPendingEscalations() {
+  const { data, error } = await supabase
+    .from('coach_escalations')
+    .select('*, user_profiles(full_name, email, current_day, goal)')
+    .eq('status', 'pending')
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return data || [];
+}
+
+// ============================================
+// GAMIFICATION
+// ============================================
+
+export async function addPoints(userId, points, reason) {
+  // Get current profile
+  const { data: profile } = await supabase
+    .from('user_profiles')
+    .select('total_points, current_level')
+    .eq('id', userId)
+    .single();
+  
+  if (!profile) return null;
+  
+  const newTotal = (profile.total_points || 0) + points;
+  const newLevel = calculateLevel(newTotal);
+  const leveledUp = newLevel !== profile.current_level;
+  
+  await supabase
+    .from('user_profiles')
+    .update({ total_points: newTotal, current_level: newLevel })
+    .eq('id', userId);
+  
+  return { newTotal, newLevel, leveledUp, previousLevel: profile.current_level };
+}
+
+export function calculateLevel(points) {
+  if (points >= 450) return 'legend';
+  if (points >= 300) return 'champion';
+  if (points >= 150) return 'warrior';
+  if (points >= 50) return 'fighter';
+  return 'rookie';
+}
+
+export async function updateStreak(userId) {
+  const profile = await getProfileByTelegramId(userId);
+  if (!profile) return null;
+  
+  const today = new Date().toISOString().split('T')[0];
+  const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+  
+  // Check if worked out yesterday
+  const { data: yesterdayCheckin } = await supabase
+    .from('daily_checkins')
+    .select('id')
+    .eq('user_id', profile.id)
+    .eq('checkin_type', 'workout')
+    .eq('workout_completed', true)
+    .eq('checkin_date', yesterday)
+    .limit(1);
+  
+  let newStreak;
+  if (yesterdayCheckin && yesterdayCheckin.length > 0) {
+    newStreak = (profile.current_streak || 0) + 1;
+  } else {
+    newStreak = 1; // Reset streak
+  }
+  
+  const maxStreak = Math.max(newStreak, profile.max_streak || 0);
+  
+  await supabase
+    .from('user_profiles')
+    .update({ current_streak: newStreak, max_streak: maxStreak })
+    .eq('id', profile.id);
+  
+  return { newStreak, maxStreak };
+}
+
+export { supabase };

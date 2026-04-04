@@ -1,0 +1,22 @@
+{
+  "name": "powerfit-mvp",
+  "version": "1.0.0",
+  "description": "PowerFit AI Coach - Backend MVP",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "setup-db": "node src/db/setup.js",
+    "test-bot": "node src/bot/test.js"
+  },
+  "dependencies": {
+    "fastify": "^4.28.0",
+    "@fastify/cors": "^9.0.1",
+    "@supabase/supabase-js": "^2.45.0",
+    "node-telegram-bot-api": "^0.66.0",
+    "@anthropic-ai/sdk": "^0.30.0",
+    "node-cron": "^3.0.3",
+    "dotenv": "^16.4.5"
+  }
+}
