@@ -147,25 +147,16 @@ export async function registerRoutes(app) {
 // ============================================
 
 function calculateCalorieTarget(data) {
-  const { sex, weight_kg, height_cm, age, goal } = data;
-  
-  if (!weight_kg || !height_cm || !age) return 2000; // Default
-  
-  // BMR calculation
-  let bmr;
+  const { sex, weight_kg } = data;
+  if (!weight_kg) return 1600;
+
   if (sex === 'male') {
-    bmr = 10 * weight_kg + 6.25 * height_cm - 5 * age + 5;
+    if (weight_kg > 100) return 2000;
+    if (weight_kg >= 80) return 1750;
+    return 1650;
   } else {
-    bmr = 10 * weight_kg + 6.25 * height_cm - 5 * age - 161;
-  }
-  
-  // Activity multiplier (moderate activity for training program)
-  const tdee = bmr * 1.55;
-  
-  // Goal adjustment
-  switch (goal) {
-    case 'fat_loss': return Math.round(tdee - 400); // Deficit 400 kcal
-    case 'muscle_gain': return Math.round(tdee + 300); // Surplus 300 kcal
-    default: return Math.round(tdee); // Maintenance / toning
+    if (weight_kg > 85) return 1600;
+    if (weight_kg >= 65) return 1450;
+    return 1300;
   }
 }
