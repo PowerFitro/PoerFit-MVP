@@ -55,82 +55,198 @@
 </head>
 <body>
 <div class="container">
-  <div class="logo"><h1>\U0001f525 PowerFit</h1><p>Completeaz\u0103 profilul t\u0103u \u00een 2 minute</p></div>
-  <div class="progress-bar"><div class="step active" data-step="1"></div><div class="step" data-step="2"></div><div class="step" data-step="3"></div><div class="step" data-step="4"></div></div>
+  <div class="logo">
+    <h1>&#x1F525; PowerFit</h1>
+    <p>Completeaz&#x103; profilul t&#x103;u &#xEE;n 2 minute</p>
+  </div>
 
+  <div class="progress-bar">
+    <div class="step active" data-step="1"></div>
+    <div class="step" data-step="2"></div>
+    <div class="step" data-step="3"></div>
+    <div class="step" data-step="4"></div>
+  </div>
+
+  <!-- STEP 1: Date Personale -->
   <div class="form-step active" id="step1">
-    <h2>Despre tine</h2><p class="subtitle">Datele de baz\u0103 pentru a personaliza programul</p>
-    <div class="field"><label>Numele t\u0103u complet</label><input type="text" id="full_name" placeholder="Ex: Andrei Popescu"></div>
-    <div class="field"><label>Email</label><input type="email" id="email" placeholder="andrei@email.com"></div>
+    <h2>Despre tine</h2>
+    <p class="subtitle">Datele de baz&#x103; pentru a personaliza programul</p>
+
+    <div class="field">
+      <label>Numele t&#x103;u complet</label>
+      <input type="text" id="full_name" placeholder="Ex: Andrei Popescu">
+    </div>
+
+    <div class="field">
+      <label>Email</label>
+      <input type="email" id="email" placeholder="andrei@email.com">
+    </div>
+
     <label style="font-size:13px;font-weight:500;color:#aaa;margin-bottom:10px;display:block;">Sex</label>
     <div class="options-grid">
-      <div class="option-card" data-field="sex" data-value="male"><div class="icon">\U0001f64b\u200d\u2642\ufe0f</div><div class="label">B\u0103rbat</div></div>
-      <div class="option-card" data-field="sex" data-value="female"><div class="icon">\U0001f64b\u200d\u2640\ufe0f</div><div class="label">Femeie</div></div>
+      <div class="option-card" data-field="sex" data-value="male">
+        <div class="icon">&#x1F64B;&#x200D;&#x2642;&#xFE0F;</div>
+        <div class="label">B&#x103;rbat</div>
+      </div>
+      <div class="option-card" data-field="sex" data-value="female">
+        <div class="icon">&#x1F64B;&#x200D;&#x2640;&#xFE0F;</div>
+        <div class="label">Femeie</div>
+      </div>
     </div>
-    <div class="row"><div class="field"><label>V\u00e2rst\u0103</label><input type="number" id="age" placeholder="30" min="14" max="80"></div><div class="field"><label>\u00cen\u0103l\u021bime (cm)</label><input type="number" id="height_cm" placeholder="175" min="140" max="220"></div></div>
-    <button class="btn btn-primary" onclick="nextStep(2)">Continu\u0103 \u2192</button>
+
+    <div class="row">
+      <div class="field">
+        <label>V&#xE2;rst&#x103;</label>
+        <input type="number" id="age" placeholder="30" min="14" max="80">
+      </div>
+      <div class="field">
+        <label>&#xCE;n&#x103;l&#x21B;ime (cm)</label>
+        <input type="number" id="height_cm" placeholder="175" min="140" max="220">
+      </div>
+    </div>
+
+    <button class="btn btn-primary" onclick="nextStep(2)">Continu&#x103; &#x2192;</button>
   </div>
 
+  <!-- STEP 2: Greutate & Obiectiv -->
   <div class="form-step" id="step2">
-    <h2>Obiectivul t\u0103u</h2><p class="subtitle">Ce vrei s\u0103 atingi cu PowerFit?</p>
-    <div class="row"><div class="field"><label>Greutate actual\u0103 (kg)</label><input type="number" id="weight_kg" placeholder="85" step="0.1" min="40" max="200"></div><div class="field"><label>Greutate dorit\u0103 (kg)</label><input type="number" id="target_weight_kg" placeholder="78" step="0.1" min="40" max="200"></div></div>
+    <h2>Obiectivul t&#x103;u</h2>
+    <p class="subtitle">Ce vrei s&#x103; atingi cu PowerFit?</p>
+
+    <div class="row">
+      <div class="field">
+        <label>Greutate actual&#x103; (kg)</label>
+        <input type="number" id="weight_kg" placeholder="85" step="0.1" min="40" max="200">
+      </div>
+      <div class="field">
+        <label>Greutate dorit&#x103; (kg)</label>
+        <input type="number" id="target_weight_kg" placeholder="78" step="0.1" min="40" max="200">
+      </div>
+    </div>
+
     <label style="font-size:13px;font-weight:500;color:#aaa;margin-bottom:10px;display:block;">Obiectivul principal</label>
     <div class="options-grid three">
-      <div class="option-card" data-field="goal" data-value="fat_loss"><div class="icon">\U0001f525</div><div class="label">Pierdere gr\u0103sime</div></div>
-      <div class="option-card" data-field="goal" data-value="toning"><div class="icon">\U0001f4aa</div><div class="label">Tonifiere</div></div>
-      <div class="option-card" data-field="goal" data-value="muscle_gain"><div class="icon">\U0001f3cb\ufe0f</div><div class="label">Mas\u0103 muscular\u0103</div></div>
+      <div class="option-card" data-field="goal" data-value="fat_loss">
+        <div class="icon">&#x1F525;</div>
+        <div class="label">Pierdere gr&#x103;sime</div>
+      </div>
+      <div class="option-card" data-field="goal" data-value="toning">
+        <div class="icon">&#x1F4AA;</div>
+        <div class="label">Tonifiere</div>
+      </div>
+      <div class="option-card" data-field="goal" data-value="muscle_gain">
+        <div class="icon">&#x1F3CB;&#xFE0F;</div>
+        <div class="label">Mas&#x103; muscular&#x103;</div>
+      </div>
     </div>
-    <div class="btn-row"><button class="btn btn-secondary" onclick="prevStep(1)">\u2190 \u00cenapoi</button><button class="btn btn-primary" onclick="nextStep(3)">Continu\u0103 \u2192</button></div>
+
+    <div class="btn-row">
+      <button class="btn btn-secondary" onclick="prevStep(1)">&#x2190; &#xCE;napoi</button>
+      <button class="btn btn-primary" onclick="nextStep(3)">Continu&#x103; &#x2192;</button>
+    </div>
   </div>
 
+  <!-- STEP 3: Experienta & Echipament -->
   <div class="form-step" id="step3">
-    <h2>Experien\u021ba ta</h2><p class="subtitle">Adapt\u0103m programul la nivelul t\u0103u</p>
-    <label style="font-size:13px;font-weight:500;color:#aaa;margin-bottom:10px;display:block;">Nivel de experien\u021b\u0103</label>
+    <h2>Experien&#x21B;a ta</h2>
+    <p class="subtitle">Adapt&#x103;m programul la nivelul t&#x103;u</p>
+
+    <label style="font-size:13px;font-weight:500;color:#aaa;margin-bottom:10px;display:block;">Nivel de experien&#x21B;&#x103;</label>
     <div class="options-grid three">
-      <div class="option-card" data-field="experience_level" data-value="beginner"><div class="icon">\U0001f331</div><div class="label">\u00cencep\u0103tor</div></div>
-      <div class="option-card" data-field="experience_level" data-value="intermediate"><div class="icon">\u26a1</div><div class="label">Intermediar</div></div>
-      <div class="option-card" data-field="experience_level" data-value="advanced"><div class="icon">\U0001f525</div><div class="label">Avansat</div></div>
+      <div class="option-card" data-field="experience_level" data-value="beginner">
+        <div class="icon">&#x1F331;</div>
+        <div class="label">&#xCE;ncep&#x103;tor</div>
+      </div>
+      <div class="option-card" data-field="experience_level" data-value="intermediate">
+        <div class="icon">&#x26A1;</div>
+        <div class="label">Intermediar</div>
+      </div>
+      <div class="option-card" data-field="experience_level" data-value="advanced">
+        <div class="icon">&#x1F525;</div>
+        <div class="label">Avansat</div>
+      </div>
     </div>
+
     <label style="font-size:13px;font-weight:500;color:#aaa;margin-bottom:10px;display:block;">Unde te antrenezi?</label>
     <div class="options-grid">
-      <div class="option-card" data-field="equipment" data-value="gym"><div class="icon">\U0001f3cb\ufe0f\u200d\u2642\ufe0f</div><div class="label">La sal\u0103</div></div>
-      <div class="option-card" data-field="equipment" data-value="outdoor"><div class="icon">\U0001f333</div><div class="label">Acas\u0103 / Parc</div></div>
+      <div class="option-card" data-field="equipment" data-value="gym">
+        <div class="icon">&#x1F3CB;&#xFE0F;&#x200D;&#x2642;&#xFE0F;</div>
+        <div class="label">La sal&#x103;</div>
+      </div>
+      <div class="option-card" data-field="equipment" data-value="outdoor">
+        <div class="icon">&#x1F333;</div>
+        <div class="label">Acas&#x103; / Parc</div>
+      </div>
     </div>
-    <div class="btn-row"><button class="btn btn-secondary" onclick="prevStep(2)">\u2190 \u00cenapoi</button><button class="btn btn-primary" onclick="nextStep(4)">Continu\u0103 \u2192</button></div>
+
+    <div class="btn-row">
+      <button class="btn btn-secondary" onclick="prevStep(2)">&#x2190; &#xCE;napoi</button>
+      <button class="btn btn-primary" onclick="nextStep(4)">Continu&#x103; &#x2192;</button>
+    </div>
   </div>
 
+  <!-- STEP 4: Lifestyle -->
   <div class="form-step" id="step4">
-    <h2>Lifestyle</h2><p class="subtitle">Ultimele detalii</p>
+    <h2>Lifestyle</h2>
+    <p class="subtitle">Ultimele detalii</p>
+
     <div class="row">
-      <div class="field"><label>Ore de somn (medie)</label><select id="sleep_hours"><option value="5">5 ore</option><option value="6">6 ore</option><option value="7" selected>7 ore</option><option value="8">8 ore</option><option value="9">9+ ore</option></select></div>
-      <div class="field"><label>Nivel de stres</label><select id="stress_level"><option value="1">1 - Foarte sc\u0103zut</option><option value="2">2 - Sc\u0103zut</option><option value="3" selected>3 - Moderat</option><option value="4">4 - Ridicat</option><option value="5">5 - Foarte ridicat</option></select></div>
+      <div class="field">
+        <label>Ore de somn (medie)</label>
+        <select id="sleep_hours">
+          <option value="5">5 ore</option>
+          <option value="6">6 ore</option>
+          <option value="7" selected>7 ore</option>
+          <option value="8">8 ore</option>
+          <option value="9">9+ ore</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Nivel de stres</label>
+        <select id="stress_level">
+          <option value="1">1 - Foarte scazut</option>
+          <option value="2">2 - Scazut</option>
+          <option value="3" selected>3 - Moderat</option>
+          <option value="4">4 - Ridicat</option>
+          <option value="5">5 - Foarte ridicat</option>
+        </select>
+      </div>
     </div>
-    <div class="btn-row"><button class="btn btn-secondary" onclick="prevStep(3)">\u2190 \u00cenapoi</button><button class="btn btn-primary" onclick="submitForm()">Finalizeaz\u0103 \u2713</button></div>
+
+    <div class="btn-row">
+      <button class="btn btn-secondary" onclick="prevStep(3)">&#x2190; &#xCE;napoi</button>
+      <button class="btn btn-primary" onclick="submitForm()">Finalizeaza &#x2713;</button>
+    </div>
     <div class="error-msg" id="errorMsg"></div>
-    <div class="loading" id="loading"><div class="spinner"></div><p style="color:#888">Se creeaz\u0103 profilul t\u0103u...</p></div>
+    <div class="loading" id="loading">
+      <div class="spinner"></div>
+      <p style="color:#888">Se creeaza profilul tau...</p>
+    </div>
   </div>
 
+  <!-- STEP 5: Success -->
   <div class="form-step" id="step5">
     <div class="success-screen">
-      <div class="big-emoji">\U0001f389</div>
-      <h2>Profilul t\u0103u e gata!</h2>
+      <div class="big-emoji">&#x1F389;</div>
+      <h2>Profilul tau e gata!</h2>
       <p>Program recomandat: <span class="highlight" id="recommendedProgram"></span></p>
       <p>Target caloric zilnic: <span class="highlight" id="calorieTarget"></span> kcal</p>
-      <p style="margin-top:20px;color:#fff;">Ultimul pas: activeaz\u0103 Coach-ul AI pe Telegram</p>
-      <a class="telegram-btn" id="telegramLink" href="#" target="_blank">\U0001f4f1 Deschide PowerFit Coach</a>
-      <p style="margin-top:16px;color:#666;font-size:12px;">Apoi revino \u00een platforma PowerFit \u0219i \u00eencepe programul.</p>
+      <p style="margin-top:20px;color:#fff;">Ultimul pas: activeaza Coach-ul AI pe Telegram</p>
+      <a class="telegram-btn" id="telegramLink" href="#" target="_blank">&#x1F4F1; Deschide PowerFit Coach</a>
+      <p style="margin-top:16px;color:#666;font-size:12px;">Apoi revino in platforma PowerFit si incepe programul.</p>
     </div>
   </div>
 </div>
+
 <script>
 const API_URL = 'https://poerfit-mvp-production.up.railway.app';
 let currentStep = 1;
 const formData = {};
 
-document.querySelectorAll('.option-card').forEach(card => {
-  card.addEventListener('click', () => {
-    const field = card.dataset.field;
-    document.querySelectorAll('.option-card[data-field="'+field+'"]').forEach(c => c.classList.remove('selected'));
+document.querySelectorAll('.option-card').forEach(function(card) {
+  card.addEventListener('click', function() {
+    var field = card.dataset.field;
+    document.querySelectorAll('.option-card[data-field="'+field+'"]').forEach(function(c) { c.classList.remove('selected'); });
     card.classList.add('selected');
     formData[field] = card.dataset.value;
   });
@@ -139,22 +255,27 @@ document.querySelectorAll('.option-card').forEach(card => {
 function nextStep(step) { if (!validateStep(currentStep)) return; collectData(); currentStep = step; showStep(step); }
 function prevStep(step) { currentStep = step; showStep(step); }
 function showStep(step) {
-  document.querySelectorAll('.form-step').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.form-step').forEach(function(s) { s.classList.remove('active'); });
   document.getElementById('step' + step).classList.add('active');
-  document.querySelectorAll('.progress-bar .step').forEach(s => { s.classList.toggle('active', parseInt(s.dataset.step) <= step); });
+  document.querySelectorAll('.progress-bar .step').forEach(function(s) { s.classList.toggle('active', parseInt(s.dataset.step) <= step); });
 }
 
 function validateStep(step) {
-  if (step === 1) { if (!document.getElementById('full_name').value.trim()) { alert('Completeaz\u0103 numele.'); return false; } if (!document.getElementById('email').value.includes('@')) { alert('Completeaz\u0103 un email valid.'); return false; } if (!formData.sex) { alert('Selecteaz\u0103 sexul.'); return false; } }
-  if (step === 2) { if (!formData.goal) { alert('Selecteaz\u0103 obiectivul.'); return false; } }
-  if (step === 3) { if (!formData.experience_level) { alert('Selecteaz\u0103 nivelul.'); return false; } if (!formData.equipment) { alert('Selecteaz\u0103 unde te antrenezi.'); return false; } }
+  if (step === 1) {
+    if (!document.getElementById('full_name').value.trim()) { alert('Completeaza numele.'); return false; }
+    if (!document.getElementById('email').value.includes('@')) { alert('Completeaza un email valid.'); return false; }
+    if (!formData.sex) { alert('Selecteaza sexul.'); return false; }
+  }
+  if (step === 2) { if (!formData.goal) { alert('Selecteaza obiectivul.'); return false; } }
+  if (step === 3) { if (!formData.experience_level) { alert('Selecteaza nivelul.'); return false; } if (!formData.equipment) { alert('Selecteaza unde te antrenezi.'); return false; } }
   return true;
 }
 
 function collectData() {
-  ['full_name','email','age','height_cm','weight_kg','target_weight_kg','sleep_hours','stress_level'].forEach(f => {
-    const el = document.getElementById(f);
-    if (el && el.value.trim()) formData[f] = isNaN(el.value) ? el.value.trim() : parseFloat(el.value);
+  var fields = ['full_name','email','age','height_cm','weight_kg','target_weight_kg','sleep_hours','stress_level'];
+  fields.forEach(function(f) {
+    var el = document.getElementById(f);
+    if (el && el.value.trim()) { formData[f] = isNaN(el.value) ? el.value.trim() : parseFloat(el.value); }
   });
 }
 
@@ -164,13 +285,14 @@ async function submitForm() {
   document.getElementById('errorMsg').style.display = 'none';
   document.getElementById('loading').classList.add('show');
   try {
-    const response = await fetch(API_URL + '/api/onboarding', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(formData) });
-    const result = await response.json();
+    var response = await fetch(API_URL + '/api/onboarding', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(formData) });
+    var result = await response.json();
     if (result.success) {
       document.getElementById('recommendedProgram').textContent = result.recommendedProgram || '';
       document.getElementById('calorieTarget').textContent = result.calorieTarget || '';
       document.getElementById('telegramLink').href = result.telegramLink || 'https://t.me/PowerFitCoachBot';
-      currentStep = 5; showStep(5);
+      currentStep = 5;
+      showStep(5);
     } else { throw new Error(result.error || 'Eroare'); }
   } catch (err) {
     document.getElementById('loading').classList.remove('show');
