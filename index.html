@@ -286,8 +286,6 @@ async function submitForm() {
     var response = await fetch(API_URL + '/api/onboarding', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(formData) });
     var result = await response.json();
     if (result.success) {
-      document.getElementById('recommendedProgram').textContent = result.recommendedProgram || '';
-      document.getElementById('calorieTarget').textContent = result.calorieTarget || '';
       document.getElementById('telegramLink').href = result.telegramLink || 'https://t.me/PowerFitCoachBot';
       currentStep = 5;
       showStep(5);
