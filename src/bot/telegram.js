@@ -139,7 +139,7 @@ export function initBot() {
   // ============================================
   bot.onText(/\/help/, async (msg) => {
     await bot.sendMessage(msg.chat.id,
-      `🤖 *PowerFit — Comenzi*\n\n` +
+      `🤖 *PowerFit Asistent — Comenzi*\n\n` +
       `💬 *Scrie orice întrebare* — Răspund instant despre antrenament, nutriție, exerciții\n\n` +
       `📸 *Trimite o poză cu mâncarea* — Analizez caloriile și macro-urile\n\n` +
       `/status — Vezi progresul tău\n` +
