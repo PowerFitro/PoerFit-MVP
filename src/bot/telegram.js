@@ -23,7 +23,7 @@ export function initBot() {
       
       if (profile) {
         await bot.sendMessage(chatId, 
-          `Bine ai revenit, ${profile.full_name}! 💪\n\n${formatPointsSummary(profile)}\n\nScrie-mi oricând dacă ai întrebări sau trimite o poză cu masa ta pentru analiză nutrițională.`,
+          `Bine ai revenit, ${profile.full_name}! 💪\n\n${formatPointsSummary(profile)}\n\nScrie-mi oricând dacă ai întrebări despre antrenament sau nutriție. Poți trimite și o poză cu masa ta pentru feedback.`,
           { parse_mode: 'Markdown' }
         );
         return;
@@ -49,7 +49,7 @@ export function initBot() {
       
       // No profile found
       await bot.sendMessage(chatId,
-        `Salut! 👋\n\nSunt Coach-ul AI PowerFit.\n\nPentru a te conecta, trebuie mai întâi să completezi profilul pe:\n🔗 start.powerfitro.com\n\nDupă ce completezi formularul, revino aici și scrie /start`
+        `Salut! 👋\n\nSunt Asistentul PowerFit.\n\nPentru a te conecta, trebuie mai întâi să completezi profilul pe:\n🔗 start.powerfitro.com\n\nDupă ce completezi formularul, revino aici și scrie /start`
       );
     } catch (error) {
       console.error('Start command error:', error);
@@ -139,7 +139,7 @@ export function initBot() {
   // ============================================
   bot.onText(/\/help/, async (msg) => {
     await bot.sendMessage(msg.chat.id,
-      `🤖 *PowerFit Coach AI — Comenzi*\n\n` +
+      `🤖 *PowerFit — Comenzi*\n\n` +
       `💬 *Scrie orice întrebare* — Răspund instant despre antrenament, nutriție, exerciții\n\n` +
       `📸 *Trimite o poză cu mâncarea* — Analizez caloriile și macro-urile\n\n` +
       `/status — Vezi progresul tău\n` +
@@ -423,7 +423,7 @@ export function initBot() {
   });
 
   // ============================================
-  // TEXT MESSAGE — AI Coach Chat
+  // TEXT MESSAGE — Asistentul PowerFit Chat
   // ============================================
   bot.on('message', async (msg) => {
     // Skip commands, photos, and callback queries
