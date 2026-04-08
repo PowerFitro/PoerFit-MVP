@@ -62,44 +62,62 @@ export function initBot() {
   // ============================================
   bot.onText(/\/coach/, async (msg) => {
     const chatId = msg.chat.id;
-    const profile = await db.getProfileByTelegramId(msg.from.id);
-    
-    if (!profile) {
-      await bot.sendMessage(chatId, 'Trebuie să te conectezi mai întâi. Scrie /start');
-      return;
-    }
-    
-    // Get recent conversation for context
-    const recentMessages = await db.getRecentConversation(profile.id, 5);
-    const context = recentMessages.map(m => `${m.role}: ${m.content}`).join('\n');
-    
-    // Create escalation
-    await db.createEscalation(profile.id, 'user_requested', context);
-    
-    // Notify admin
-    const adminChatId = process.env.TELEGRAM_ADMIN_CHAT_ID;
-    if (adminChatId) {
-      const level = LEVELS[profile.current_level] || LEVELS.rookie;
-      await bot.sendMessage(adminChatId,
-        `⚠️ *ESCALADARE — Contact direct solicitat*\n\n` +
-        `👤 *${profile.full_name}*\n` +
-        `📧 ${profile.email}\n` +
-        `📅 Ziua ${profile.current_day}/14 | ${level.emoji} ${level.name}\n` +
-        `🎯 Obiectiv: ${profile.goal}\n` +
-        `🔥 Streak: ${profile.current_streak} zile\n\n` +
-        `💬 *Ultimele mesaje:*\n${context || 'Niciun context disponibil'}\n\n` +
-        `📱 Telegram: @${profile.telegram_username || 'N/A'}\n` +
-        `🆔 Chat ID: ${chatId}`,
-        { parse_mode: 'Markdown' }
+    try {
+      const profile = await db.getProfileByTelegramId(msg.from.id);
+      
+      if (!profile) {
+        await bot.sendMessage(chatId, 'Trebuie să te conectezi mai întâi. Scrie /start');
+        return;
+      }
+      
+      // Get recent conversation for context
+      let context = '';
+      try {
+        const recentMessages = await db.getRecentConversation(profile.id, 5);
+        context = recentMessages.map(m => `${m.role}: ${m.content}`).join('\n');
+      } catch (e) {
+        console.error('Error getting conversation:', e.message);
+      }
+      
+      // Create escalation
+      try {
+        await db.createEscalation(profile.id, 'user_requested', context);
+      } catch (e) {
+        console.error('Error creating escalation:', e.message);
+      }
+      
+      // Notify admin
+      const adminChatId = process.env.TELEGRAM_ADMIN_CHAT_ID;
+      if (adminChatId) {
+        try {
+          const level = LEVELS[profile.current_level] || LEVELS.rookie;
+          await bot.sendMessage(adminChatId,
+            '⚠️ ESCALADARE\n\n' +
+            'Client: ' + profile.full_name + '\n' +
+            'Email: ' + profile.email + '\n' +
+            'Ziua: ' + profile.current_day + '/14\n' +
+            'Chat ID: ' + chatId,
+            {}
+          );
+        } catch (e) {
+          console.error('Error notifying admin:', e.message);
+        }
+      }
+      
+      const coachName = getCoachName();
+      await bot.sendMessage(chatId,
+        'Am transmis mesajul tău! 📩\n\n' + coachName + ' va reveni către tine în cel mai scurt timp.\n\nÎntre timp, sunt aici dacă ai alte întrebări.'
       );
+      
+      try {
+        await db.logNotification(profile.id, 'escalation_to_coach', 'telegram', 'User requested direct coach contact');
+      } catch (e) {
+        console.error('Error logging notification:', e.message);
+      }
+    } catch (error) {
+      console.error('Coach command error:', error.message);
+      await bot.sendMessage(chatId, 'A apărut o eroare. Te rog să încerci din nou.');
     }
-    
-    await bot.sendMessage(chatId,
-      `Am transmis mesajul tău! 📩\n\n*${getCoachName()}* va reveni către tine în cel mai scurt timp.\n\nÎntre timp, sunt aici dacă ai alte întrebări.`,
-      { parse_mode: 'Markdown' }
-    );
-    
-    await db.logNotification(profile.id, 'escalation_to_coach', 'telegram', 'User requested direct coach contact');
   });
 
   // ============================================
