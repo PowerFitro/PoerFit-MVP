@@ -39,7 +39,7 @@ export function initBot() {
             telegram_user_id: userId,
             telegram_chat_id: chatId,
             telegram_username: msg.from.username || null
-          });
+          }); */
           
           const welcome = await ai.generateWelcomeMessage(profile);
           await bot.sendMessage(chatId, welcome, { parse_mode: 'Markdown' });
@@ -55,7 +55,7 @@ export function initBot() {
       console.error('Start command error:', error);
       await bot.sendMessage(chatId, 'A apărut o eroare. Te rog să încerci din nou.');
     }
-  });
+  }); */
 
   // ============================================
   // COMMAND: /coach — Escalate to human coach
@@ -118,7 +118,7 @@ export function initBot() {
       console.error('Coach command error:', error.message);
       await bot.sendMessage(chatId, 'A apărut o eroare. Te rog să încerci din nou.');
     }
-  });
+  }); */
 
   // ============================================
   // COMMAND: /status — Current progress
@@ -150,7 +150,7 @@ export function initBot() {
       `📈 Dificultate medie: *${stats.avgDifficulty.toFixed(1)}*/5`,
       { parse_mode: 'Markdown' }
     );
-  });
+  }); */
 
   // ============================================
   // COMMAND: /help — Available commands
@@ -166,7 +166,7 @@ export function initBot() {
       `/help — Această listă de comenzi`,
       { parse_mode: 'Markdown' }
     );
-  });
+  }); */
 
   // ============================================
   // COMMAND: /checkin — Manual workout check-in
@@ -193,7 +193,7 @@ export function initBot() {
         }
       }
     );
-  });
+  }); */
 
   // ============================================
   // CALLBACK QUERIES (inline buttons)
@@ -253,14 +253,14 @@ export function initBot() {
         difficulty_rating: rating,
         energy_level: rating <= 2 ? 'high' : rating <= 3 ? 'ok' : 'low',
         program_day: newDay
-      });
+      }); */
       
       // Update profile day
       const isCompleted = newDay >= 14;
       await db.updateProfile(profile.id, { 
         current_day: newDay,
         ...(isCompleted ? { program_completed: true, program_completed_date: new Date().toISOString() } : {})
-      });
+      }); */
       
       // Process points
       const pointsResult = await processWorkoutCompletion(profile.id);
@@ -366,7 +366,7 @@ export function initBot() {
     if (data === 'morning_question') {
       await bot.sendMessage(chatId, 'Scrie-mi întrebarea ta și răspund imediat! 💬');
     }
-  });
+  }); */
 
   // ============================================
   // PHOTO MESSAGE — Food Log
@@ -409,7 +409,7 @@ export function initBot() {
           carbs_g: analysis.carbs,
           ai_feedback: analysis.feedback,
           photo_file_id: photo.file_id
-        });
+        }); */
         
         // Add points for food logging
         const pointsResult = await db.addPoints(profile.id, POINTS.FOOD_LOG_PHOTO, 'food_log');
@@ -439,7 +439,7 @@ export function initBot() {
       console.error('Photo processing error:', error);
       await bot.sendMessage(chatId, 'A apărut o eroare la procesarea pozei. Încearcă din nou.');
     }
-  });
+  }); */ */
 
   // ============================================
   // TEXT MESSAGE — Asistentul PowerFit Chat
@@ -486,7 +486,7 @@ export function initBot() {
       console.error('Chat error:', error);
       await bot.sendMessage(chatId, 'Scuze, am o problemă momentan. Încearcă din nou sau scrie /coach pentru antrenor.');
     }
-  });
+  }); */
 
   console.log('🤖 Telegram Bot initialized');
   return bot;
@@ -681,10 +681,10 @@ function downloadAsBase64(url) {
       res.on('end', () => {
         const buffer = Buffer.concat(chunks);
         resolve(buffer.toString('base64'));
-      });
+      }); */
       res.on('error', reject);
     }).on('error', reject);
-  });
+  }); */
 }
 
 export { bot };
