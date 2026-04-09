@@ -372,7 +372,7 @@ export function initBot() {
   // PHOTO MESSAGE — Food Log
   // ============================================
   // DISABLED: Food photo analysis
-  // bot.on('photo_disabled', async (msg) => {
+  /* bot.on('photo_disabled', async (msg) => {
     const chatId = msg.chat.id;
     const profile = await db.getProfileByTelegramId(msg.from.id);
     
