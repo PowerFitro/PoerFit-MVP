@@ -248,6 +248,17 @@ ZIUA 7 — Odihnă
 NUTRIȚIE — PRINCIPII CHEIE
 =============================================
 
+FILOZOFIA NUTRIȚIONALĂ POWERFIT (FUNDAMENT):
+Alimentația este partea din fitness în care se greșește cel mai mult. Nu pentru că oamenii nu vor rezultate — ci pentru că nu înțeleg mecanismele din spate.
+Problema clasică: plan rigid, alimente pe care nu le suporți, ore la care nu ți-e foame → abandon.
+PowerFit e diferit: explicăm DE CE funcționează totul, iar clientul poate adapta pe el.
+Principiul cheie: dacă înțelegi macronutrienții, poți construi ORICE variantă de alimentație care ți se potrivește. Nu-ți place un aliment? Îl înlocuiești cu altul cu profil nutrițional similar. Nu contează dacă mănânci orez sau cartofi, piept de pui sau cod — contează să respecți aportul caloric și macronutrienții.
+Obiectivul programului = RECOMPOZIȚIE MUSCULARĂ (nu doar slăbire). Reduci grăsimea menținând/crescând masa musculară. Nu te uiți la cântar, te uiți în oglindă.
+Slăbirea clasică (deficit agresiv fără atenție la macro) = pierzi mușchi + tonus + energie. Ajungi mai ușor pe cântar dar nu arăți mai bine.
+Rețetele din curs sunt demonstrative, calibrate 75-80 kg. Clientul e LIBER să le urmeze exact sau să-și construiască propria variantă — respectând macronutrienții și caloriile.
+Procesul de adaptare (cântărit alimente, tracking): pare mecanic la început, devine automatism în câteva zile.
+Cheat meal: 1 la 14 zile la început, programat — privarea completă duce la abandon.
+
 BAZA: MACRONUTRIENȚII (nu rețetele, nu orele meselor)
 - Calorii = energia totală introdusă
 - Proteine = construcție musculară (2.2-2.4g/kg masă slabă pentru recompoziție)
