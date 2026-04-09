@@ -439,7 +439,7 @@ export function initBot() {
       console.error('Photo processing error:', error);
       await bot.sendMessage(chatId, 'A apărut o eroare la procesarea pozei. Încearcă din nou.');
     }
-  });
+  }); */
 
   // ============================================
   // TEXT MESSAGE — Asistentul PowerFit Chat
