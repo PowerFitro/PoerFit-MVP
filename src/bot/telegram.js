@@ -669,6 +669,58 @@ function generateProgressBar(percentage) {
   return '▓'.repeat(filled) + '░'.repeat(empty);
 }
 
+
+
+// ============================================
+// PRE-PROGRAM MESSAGE — Preparation phase
+// ============================================
+export async function sendPreProgramMessage(profile, startDate) {
+  if (!profile.telegram_chat_id || !bot) return;
+  
+  const today = new Date();
+  const start = new Date(startDate + 'T00:00:00');
+  const daysUntilStart = Math.ceil((start - today) / (1000 * 60 * 60 * 24));
+  
+  let message = '';
+  
+  if (daysUntilStart > 5) {
+    message = 'Buna dimineata, ' + profile.full_name + '! \u{1F4AA}\n\nProgramul tau de antrenament incepe luni. Pana atunci, ai cateva lucruri importante de parcurs:\n\n' +
+      '\u{1F4DA} Parcurge sectiunea "Informatii utile" - acolo gasesti strategia completa de alimentatie\n' +
+      '\u{1F9EE} Calculeaza-ti macronutrientii - foloseste calculatorul din curs sau scrie-mi aici sexul, greutatea si procentul de grasime\n' +
+      '\u{1F4F1} Descarca o aplicatie de tracking nutritional\n\nAcesti pasi sunt esentiali inainte de prima zi de antrenament.';
+  } else if (daysUntilStart > 3) {
+    message = 'Buna dimineata, ' + profile.full_name + '! \u{1F4AA}\n\n' +
+      'Mai sunt ' + daysUntilStart + ' zile pana la startul programului.\n\n' +
+      'Ai calculat macronutrientii? Daca nu, scrie-mi aici datele tale si te ajut instant.\n' +
+      'Fa antrenamentul pregatitor azi - te va ajuta sa intri in ritm luni.\n' +
+      'Verifica lista de cumparaturi din sectiunea Alimentatie.';
+  } else if (daysUntilStart >= 2) {
+    message = 'Buna dimineata, ' + profile.full_name + '! \u{1F4AA}\n\n' +
+      'Mai sunt ' + daysUntilStart + ' zile! Fa antrenamentul pregatitor daca nu l-ai facut inca.\n\n' +
+      'Verifica ca ai totul pregatit:\n' +
+      '- Macronutrientii calculati\n' +
+      '- Ingredientele cumparate\n' +
+      '- Aplicatia de tracking instalata\n\nLuni incepem la intensitate maxima!';
+  } else if (daysUntilStart === 1) {
+    message = 'Buna dimineata, ' + profile.full_name + '! \u{1F525}\n\n' +
+      'Maine incepe programul! Ziua 1: antrenament complet + plan alimentar.\n\n' +
+      'Diseara se deblocheaza Saptamana 1.\n' +
+      'Maine dimineata la 8:00 primesti primul reminder cu antrenamentul zilei.\n\n' +
+      'Esti pregatit? \u{1F4AA}';
+  } else {
+    message = 'Buna dimineata, ' + profile.full_name + '! \u{1F525}\n\n' +
+      'Programul tau incepe luni. Parcurge materialele din curs si pregateste-te!\n\n' +
+      'Scrie-mi daca ai intrebari.';
+  }
+  
+  try {
+    await bot.sendMessage(profile.telegram_chat_id, message);
+    await db.logNotification(profile.id, 'morning_checkin', 'telegram', 'Pre-program preparation message');
+  } catch (error) {
+    console.error('Pre-program message error:', error.message);
+  }
+}
+
 function getCoachName() {
   return process.env.COACH_NAME || 'Antrenorul';
 }
