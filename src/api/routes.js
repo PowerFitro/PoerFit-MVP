@@ -1,5 +1,18 @@
 import * as db from '../db/supabase.js';
 
+// Calculate next Monday from today
+function getNextMonday() {
+  const today = new Date();
+  const dayOfWeek = today.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+  let daysUntilMonday;
+  if (dayOfWeek === 0) daysUntilMonday = 1; // Sunday -> tomorrow
+  else if (dayOfWeek === 1) daysUntilMonday = 7; // Monday -> next Monday (not today)
+  else daysUntilMonday = 8 - dayOfWeek; // Tue-Sat -> next Monday
+  const nextMonday = new Date(today);
+  nextMonday.setDate(today.getDate() + daysUntilMonday);
+  return nextMonday.toISOString().split('T')[0];
+}
+
 export async function registerRoutes(app) {
   
   // ============================================
@@ -25,7 +38,7 @@ export async function registerRoutes(app) {
         const updated = await db.updateProfile(existing.id, {
           ...data,
           onboarding_completed: true,
-          program_start_date: new Date().toISOString().split('T')[0],
+          program_start_date: getNextMonday(),
           program_type: data.equipment === 'gym' ? 'gym_week1' : 'outdoor_week1'
         });
         return reply.send({ success: true, profile: updated, isUpdate: true });
@@ -52,7 +65,7 @@ export async function registerRoutes(app) {
         sleep_hours: data.sleep_hours,
         stress_level: data.stress_level,
         onboarding_completed: true,
-        program_start_date: new Date().toISOString().split('T')[0],
+        program_start_date: getNextMonday(),
         program_type: data.equipment === 'gym' ? 'gym_week1' : 'outdoor_week1'
       });
       

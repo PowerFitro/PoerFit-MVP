@@ -1,6 +1,6 @@
 import cron from 'node-cron';
 import * as db from '../db/supabase.js';
-import { sendMorningCheckin, sendEveningCheckin, sendAntiChurnMessage, sendWeeklyReview, sendPostProgramMessage } from '../bot/telegram.js';
+import { sendMorningCheckin, sendEveningCheckin, sendAntiChurnMessage, sendWeeklyReview, sendPostProgramMessage, sendPreProgramMessage } from '../bot/telegram.js';
 
 export function initCronJobs() {
   
@@ -11,12 +11,22 @@ export function initCronJobs() {
     console.log('[CRON] Morning check-in starting...');
     try {
       const profiles = await db.getAllActiveProfiles();
+      const today = new Date().toISOString().split('T')[0];
       
       for (const profile of profiles) {
         const alreadySent = await db.wasNotificationSentToday(profile.id, 'morning_checkin');
-        if (!alreadySent) {
+        if (alreadySent) continue;
+        
+        const startDate = profile.program_start_date;
+        
+        if (!startDate || today < startDate) {
+          // PRE-PROGRAM: send preparation message
+          await sendPreProgramMessage(profile, startDate);
+          await sleep(1000);
+        } else {
+          // IN-PROGRAM: send regular training check-in
           await sendMorningCheckin(profile);
-          await sleep(1000); // Rate limiting
+          await sleep(1000);
         }
       }
       console.log(`[CRON] Morning check-in sent to ${profiles.length} users`);
@@ -32,8 +42,12 @@ export function initCronJobs() {
     console.log('[CRON] Evening check-in starting...');
     try {
       const profiles = await db.getAllActiveProfiles();
+      const today = new Date().toISOString().split('T')[0];
       
       for (const profile of profiles) {
+        // Skip pre-program users (no evening check-in before start)
+        if (profile.program_start_date && today < profile.program_start_date) continue;
+        
         const alreadySent = await db.wasNotificationSentToday(profile.id, 'evening_checkin');
         if (!alreadySent) {
           await sendEveningCheckin(profile);
