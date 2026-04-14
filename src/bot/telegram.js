@@ -510,16 +510,16 @@ export async function sendMorningCheckin(profile) {
   
   if (isRestDay) {
     message = 'Buna dimineata, ' + profile.full_name + '!\n\n' +
-      'Ziua ' + dayNumber + '/14 — Zi de odihna.\n\n' +
-      'Corpul tau se recupereaza si creste azi. Respecta planul alimentar si odihneste-te. Maine revenim la treaba.';
+      'Ziua ' + dayNumber + '/14 — Zi de odihnă.\n\n' +
+      'Corpul tău se recuperează și crește azi. Respectă planul alimentar și odihnește-te. Mâine revenim la treabă.';
   } else if (isCardioDay) {
     message = 'Buna dimineata, ' + profile.full_name + '!\n\n' +
       'Ziua ' + dayNumber + '/14 — ' + dayInfo + '\n\n' +
-      'Daca simti oboseala acumulata dupa primele zile, ia o pauza completa azi. Programul se decaleaza cu o zi. Daca te simti bine, hai la cardio!';
+      'Dacă simți oboseala acumulată după primele zile, ia o pauză completă azi. Programul se decalează cu o zi. Dacă te simți bine, hai la cardio!';
   } else {
     message = 'Buna dimineata, ' + profile.full_name + '!\n\n' +
       'Ziua ' + dayNumber + '/14 — ' + dayInfo + '\n\n' +
-      'Deschide lectia in PowerFit si urmeaza instructiunile. Dupa antrenament, apasa butonul de mai jos.';
+      'Deschide lecția în PowerFit și urmează instrucțiunile. După antrenament, apasă butonul de mai jos.';
   }
   
   const keyboard = isRestDay ? [] : [[
@@ -691,33 +691,33 @@ export async function sendPreProgramMessage(profile, startDate) {
   let message = '';
   
   if (daysUntilStart > 5) {
-    message = 'Buna dimineata, ' + profile.full_name + '! \u{1F4AA}\n\nProgramul tau de antrenament incepe luni. Pana atunci, ai cateva lucruri importante de parcurs:\n\n' +
-      '\u{1F4DA} Parcurge sectiunea "Informatii utile" - acolo gasesti strategia completa de alimentatie\n' +
-      '\u{1F9EE} Calculeaza-ti macronutrientii - foloseste calculatorul din curs sau scrie-mi aici sexul, greutatea si procentul de grasime\n' +
-      '\u{1F4F1} Descarca o aplicatie de tracking nutritional\n\nAcesti pasi sunt esentiali inainte de prima zi de antrenament.';
+    message = 'Buna dimineata, ' + profile.full_name + '! \u{1F4AA}\n\nProgramul tău de antrenament începe luni. Până atunci, ai câteva lucruri importante de parcurs:\n\n' +
+      '\u{1F4DA} Parcurge secțiunea "Informatii utile" - acolo găsești strategia completă de alimentație\n' +
+      '\u{1F9EE} Calculează-ți macronutrienții — folosește calculatorul din curs sau scrie-mi aici sexul, greutatea și procentul de grăsime\n' +
+      '\u{1F4F1} Descarcă o aplicație de tracking nutrițional\n\nAcești pași sunt esențiali înainte de prima zi de antrenament.';
   } else if (daysUntilStart > 3) {
     message = 'Buna dimineata, ' + profile.full_name + '! \u{1F4AA}\n\n' +
-      'Mai sunt ' + daysUntilStart + ' zile pana la startul programului.\n\n' +
-      'Ai calculat macronutrientii? Daca nu, scrie-mi aici datele tale si te ajut instant.\n' +
-      'Fa antrenamentul pregatitor azi - te va ajuta sa intri in ritm luni.\n' +
-      'Verifica lista de cumparaturi din sectiunea Alimentatie.';
+      'Mai sunt ' + daysUntilStart + ' zile până la startul programului.\n\n' +
+      'Ai calculat macronutrienții? Dacă nu, scrie-mi aici datele tale și te ajut instant.\n' +
+      'Fă antrenamentul pregătitor azi — te va ajuta să intri în ritm luni.\n' +
+      'Verifică lista de cumpărături din secțiunea Alimentație.';
   } else if (daysUntilStart >= 2) {
     message = 'Buna dimineata, ' + profile.full_name + '! \u{1F4AA}\n\n' +
-      'Mai sunt ' + daysUntilStart + ' zile! Fa antrenamentul pregatitor daca nu l-ai facut inca.\n\n' +
-      'Verifica ca ai totul pregatit:\n' +
-      '- Macronutrientii calculati\n' +
-      '- Ingredientele cumparate\n' +
-      '- Aplicatia de tracking instalata\n\nLuni incepem la intensitate maxima!';
+      'Mai sunt ' + daysUntilStart + ' zile! Fă antrenamentul pregătitor dacă nu l-ai făcut încă.\n\n' +
+      'Verifică că ai totul pregătit:\n' +
+      '- Macronutrienții calculați\n' +
+      '- Ingredientele cumpărate\n' +
+      '- Aplicația de tracking instalată\n\nLuni începem la intensitate maximă!';
   } else if (daysUntilStart === 1) {
     message = 'Buna dimineata, ' + profile.full_name + '! \u{1F525}\n\n' +
-      'Maine incepe programul! Ziua 1: antrenament complet + plan alimentar.\n\n' +
-      'Diseara se deblocheaza Saptamana 1.\n' +
-      'Maine dimineata la 8:00 primesti primul reminder cu antrenamentul zilei.\n\n' +
-      'Esti pregatit? \u{1F4AA}';
+      'Mâine începe programul! Ziua 1: antrenament complet + plan alimentar.\n\n' +
+      'Diseară se deblochează Săptămâna 1.\n' +
+      'Mâine dimineață la 8:00 primești primul reminder cu antrenamentul zilei.\n\n' +
+      'Ești pregătit? \u{1F4AA}';
   } else {
     message = 'Buna dimineata, ' + profile.full_name + '! \u{1F525}\n\n' +
-      'Programul tau incepe luni. Parcurge materialele din curs si pregateste-te!\n\n' +
-      'Scrie-mi daca ai intrebari.';
+      'Programul tău începe luni. Parcurge materialele din curs și pregătește-te!\n\n' +
+      'Scrie-mi dacă ai întrebări.';
   }
   
   try {
