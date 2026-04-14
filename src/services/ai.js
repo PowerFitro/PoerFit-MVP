@@ -525,27 +525,9 @@ function parseFoodAnalysis(text) {
 // ============================================
 
 export async function generateMotivationalMessage(profile, context) {
-  try {
-    const response = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 150,
-      system: 'Ești Coach-ul AI PowerFit. Generează mesaje motivaționale scurte (1-2 propoziții) în română, directe și energice. Fără clișee. Personalizează pe baza datelor clientului.',
-      messages: [{
-        role: 'user',
-        content: `Generează un mesaj motivațional pentru:
-Nume: ${profile.full_name}
-Ziua: ${profile.current_day}/14
-Streak: ${profile.current_streak} zile
-Nivel: ${profile.current_level}
-Obiectiv: ${profile.goal}
-Context: ${context}`
-      }]
-    });
-    return response.content[0].text;
-  } catch (error) {
-    console.error('Motivational message error:', error);
-    return `Zi bună, ${profile.full_name}! Hai să facem treabă azi. 💪`;
-  }
+  // No longer generating AI motivational messages
+  // Morning checkin now uses fixed, clean messages
+  return '';
 }
 
 // ============================================
@@ -557,7 +539,7 @@ export async function generateWeeklyReview(profile, stats) {
     const response = await client.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 400,
-      system: 'Ești Coach-ul AI PowerFit. Generează un review săptămânal concis în română. Fii direct, specific, și motivant. Maxim 200 cuvinte.',
+      system: 'Ești Asistentul PowerFit, instruit de Sam. Generează un review săptămânal concis în română. Fii direct, specific, și motivant. Maxim 200 cuvinte.',
       messages: [{
         role: 'user',
         content: `Generează review-ul săptămânal pentru:
@@ -625,7 +607,7 @@ export async function generateWelcomeMessage(profile) {
     const response = await client.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 200,
-      system: 'Ești Coach-ul AI PowerFit. Scrie un mesaj de bun venit cald și energic în română. Maxim 4-5 propoziții. Include informații specifice din profilul clientului.',
+      system: 'Ești Asistentul PowerFit, instruit de Sam. Scrie un mesaj de bun venit cald și energic în română. Maxim 4-5 propoziții. Include informații specifice din profilul clientului.',
       messages: [{
         role: 'user',
         content: `Client nou:

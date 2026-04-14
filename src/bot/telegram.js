@@ -500,30 +500,37 @@ export async function sendMorningCheckin(profile) {
   if (!bot || !profile.telegram_chat_id) return;
   
   const dayNumber = (profile.current_day || 0) + 1;
-  if (dayNumber > 14) return; // Program completed
+  if (dayNumber > 14) return;
   
   const dayInfo = getDayInfo(dayNumber);
-  const motivational = await ai.generateMotivationalMessage(profile, `Dimineața zilei ${dayNumber}`);
+  const isRestDay = dayNumber === 7 || dayNumber === 14;
+  const isCardioDay = dayNumber === 4 || dayNumber === 11;
   
-  await bot.sendMessage(profile.telegram_chat_id,
-    `☀️ *Bună dimineața, ${profile.full_name}!*\n\n` +
-    `📅 Ziua *${dayNumber}* din 14\n` +
-    `📋 ${dayInfo}\n\n` +
-    `${motivational}`,
-    {
-      parse_mode: 'Markdown',
-      reply_markup: {
-        inline_keyboard: [
-          [
-            { text: '💪 Sunt gata!', callback_data: 'morning_ready' },
-            { text: '❓ Am o întrebare', callback_data: 'morning_question' },
-          ]
-        ]
-      }
-    }
+  let message = '';
+  
+  if (isRestDay) {
+    message = 'Buna dimineata, ' + profile.full_name + '!\n\n' +
+      'Ziua ' + dayNumber + '/14 — Zi de odihna.\n\n' +
+      'Corpul tau se recupereaza si creste azi. Respecta planul alimentar si odihneste-te. Maine revenim la treaba.';
+  } else if (isCardioDay) {
+    message = 'Buna dimineata, ' + profile.full_name + '!\n\n' +
+      'Ziua ' + dayNumber + '/14 — ' + dayInfo + '\n\n' +
+      'Daca simti oboseala acumulata dupa primele zile, ia o pauza completa azi. Programul se decaleaza cu o zi. Daca te simti bine, hai la cardio!';
+  } else {
+    message = 'Buna dimineata, ' + profile.full_name + '!\n\n' +
+      'Ziua ' + dayNumber + '/14 — ' + dayInfo + '\n\n' +
+      'Deschide lectia in PowerFit si urmeaza instructiunile. Dupa antrenament, apasa butonul de mai jos.';
+  }
+  
+  const keyboard = isRestDay ? [] : [[
+    { text: 'Am terminat antrenamentul', callback_data: 'workout_yes' }
+  ]];
+  
+  await bot.sendMessage(profile.telegram_chat_id, message, 
+    keyboard.length > 0 ? { reply_markup: { inline_keyboard: keyboard } } : {}
   );
   
-  await db.logNotification(profile.id, 'morning_checkin', 'telegram', `Day ${dayNumber} morning checkin`);
+  await db.logNotification(profile.id, 'morning_checkin', 'telegram', 'Day ' + dayNumber + ' morning checkin');
 }
 
 export async function sendEveningCheckin(profile) {
@@ -645,20 +652,20 @@ export async function sendPostProgramMessage(profile, daysSinceCompletion) {
 
 function getDayInfo(dayNumber) {
   const schedule = {
-    1: 'Picioare, Piept și Abdomen',
-    2: 'Spate, Umeri și Biceps',
-    3: 'Brațe, Picioare și Gambe',
-    4: 'Picioare, Piept și Abdomen',
-    5: 'Spate, Umeri și Biceps',
-    6: 'Brațe, Picioare și Gambe',
-    7: 'Picioare, Piept și Abdomen',
-    8: 'Spate, Umeri și Biceps',
-    9: 'Brațe, Picioare și Gambe',
-    10: 'Picioare, Piept și Abdomen',
-    11: 'Spate, Umeri și Biceps',
-    12: 'Brațe, Picioare și Gambe',
-    13: 'Picioare, Piept și Abdomen',
-    14: 'Spate, Umeri și Biceps (ZIUA FINALĂ! 🏆)',
+    1: 'Picioare, Piept si Abdomen',
+    2: 'Spate, Umeri, Abdomen si Lombari',
+    3: 'Brate, Picioare si Gambe',
+    4: 'Cardio HIIT (sau zi de pauza daca esti obosit)',
+    5: 'Exercitii fundamentale + Grup muscular deficitar',
+    6: 'Volum total (Tractiuni 50 + Dips 80 + Squat 100)',
+    7: 'Zi de odihna',
+    8: 'Picioare (baza), Brate, Abdomen',
+    9: 'Spate, Piept',
+    10: 'Umeri, Picioare, Gambe si Abdomen',
+    11: 'Cardio intervale',
+    12: 'Exercitii fundamentale + Grup muscular deficitar',
+    13: 'Volum total (Tractiuni 60 + Dips 80 + Squat 100)',
+    14: 'Zi de odihna - PROGRAMUL S-A INCHEIAT!',
   };
   return schedule[dayNumber] || 'Antrenament';
 }
