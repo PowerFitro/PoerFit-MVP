@@ -17,9 +17,12 @@ export function initBot() {
     const userId = msg.from.id;
     const param = match[1]?.trim(); // Parameter from deep link (email encoded)
     
+    console.log('[START] Received /start from userId:', userId, 'param:', JSON.stringify(param));
+    
     try {
       // Check if already linked
       let profile = await db.getProfileByTelegramId(userId);
+      console.log('[START] Existing profile:', profile ? profile.email : 'none');
       
       if (profile) {
         await bot.sendMessage(chatId, 
