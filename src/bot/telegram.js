@@ -109,7 +109,7 @@ export function initBot() {
       
       const coachName = getCoachName();
       await bot.sendMessage(chatId,
-        'Am transmis mesajul tău! 📩\n\n' + coachName + ' va reveni către tine în cel mai scurt timp.\n\nÎntre timp, sunt aici dacă ai alte întrebări.'
+        'Am transmis mesajul tău! 📩\n\nEchipa de coaching va reveni către tine în cel mai scurt timp, de obicei în aceeași zi.\n\nÎntre timp, sunt aici dacă ai alte întrebări.'
       );
       
       try {
