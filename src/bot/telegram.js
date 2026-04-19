@@ -160,13 +160,13 @@ export function initBot() {
   // ============================================
   bot.onText(/\/help/, async (msg) => {
     await bot.sendMessage(msg.chat.id,
-      `*Asistent PowerFit*\n\n` +
-      `💬 *Scrie orice întrebare* — Răspund instant despre antrenament, nutriție, exerciții\n\n` +
-      `📸 *Trimite o poză cu mâncarea* — Analizez caloriile și macro-urile\n\n` +
-      `/status — Vezi progresul tău\n` +
+     `*Asistent PowerFit*\n\n` +
+      `💬 *Scrie-mi orice întrebare* — Antrenament, nutriție, exerciții, dureri, progres. Răspund rapid.\n\n` +
+      `/status — Progresul tău și ziua curentă\n` +
       `/checkin — Loghează antrenamentul de azi\n` +
-      `/coach — Vorbește direct cu antrenorul\n` +
-      `/help — Această listă de comenzi`,
+      `/coach — Trimite un mesaj echipei de coaching\n` +
+      `/help — Lista de comenzi\n\n` +
+      `Dacă ai nevoie de ajutor specific cu planul alimentar sau antrenamentul, scrie-mi în detaliu și te ghidez.`,
       { parse_mode: 'Markdown' }
     );
   });
