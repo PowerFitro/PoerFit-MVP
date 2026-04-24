@@ -352,7 +352,7 @@ export function initBot() {
     
     // --- MORNING CHECK-IN RESPONSES ---
     if (data === 'morning_ready') {
-      const dayInfo = getDayInfo(profile.current_day + 1);
+      const dayInfo = getDayInfo(profile.current_day + 1, profile.equipment);
       await bot.sendMessage(chatId,
         `💪 Hai să facem treabă!\n\n📋 *Ziua ${profile.current_day + 1}:* ${dayInfo}\n\n🔗 Deschide lecția în PowerFit și urmează instrucțiunile.\n\nDupă antrenament, scrie /checkin sau apasă butonul de mai jos:`,
         { 
@@ -373,7 +373,7 @@ export function initBot() {
     // --- FILOZOFIA C: Recuperare sau Sari la zi ---
     if (data === 'morning_recover') {
       const recoveryDay = (profile.current_day || 0) + 1;
-      const dayInfo = getDayInfo(recoveryDay);
+      const dayInfo = getDayInfo(recoveryDay, profile.equipment);
       const isRest = recoveryDay === 7 || recoveryDay === 14;
       
       let msg = '💪 Bine, recuperăm!\n\n' +
@@ -399,7 +399,7 @@ export function initBot() {
     
     if (data === 'morning_skip_ahead') {
       const calendarDay = getCalendarProgramDayLocal(profile.program_start_date);
-      const dayInfo = getDayInfo(calendarDay);
+      const dayInfo = getDayInfo(calendarDay, profile.equipment);
       const isRest = calendarDay === 7 || calendarDay === 14;
       
       // Când sare, marchez zilele intermediare ca "skip" prin update current_day la calendarDay - 1
@@ -595,8 +595,8 @@ export async function sendMorningCheckin(profile) {
   
   if (isLate) {
     // SCENARIUL "ÎN URMĂ" — varianta A cu butoane de alegere (Filozofia C)
-    const recoveryDayInfo = getDayInfo(nextLogicDay);
-    const calendarDayInfo = getDayInfo(calendarDay);
+    const recoveryDayInfo = getDayInfo(nextLogicDay, profile.equipment);
+    const calendarDayInfo = getDayInfo(calendarDay, profile.equipment);
     const isRecoveryRest = nextLogicDay === 7 || nextLogicDay === 14;
     const isCalendarRest = calendarDay === 7 || calendarDay === 14;
     
@@ -614,7 +614,7 @@ export async function sendMorningCheckin(profile) {
   } else {
     // SCENARIUL "LA ZI" — logica veche, curățată cu diacritice
     const dayNumber = calendarDay;
-    const dayInfo = getDayInfo(dayNumber);
+    const dayInfo = getDayInfo(dayNumber, profile.equipment);
     const isRestDay = dayNumber === 7 || dayNumber === 14;
     const isCardioDay = dayNumber === 4 || dayNumber === 11;
     
@@ -762,8 +762,9 @@ export async function sendPostProgramMessage(profile, daysSinceCompletion) {
 // HELPER FUNCTIONS
 // ============================================
 
-function getDayInfo(dayNumber) {
-  const schedule = {
+function getDayInfo(dayNumber, equipment) {
+  // Programe ușor diferite între sală și aer liber (bazate pe cursul PowerFit)
+  const scheduleGym = {
     1: 'Picioare, Piept și Abdomen',
     2: 'Spate, Umeri, Abdomen și Lombari',
     3: 'Brațe, Picioare și Gambe',
@@ -779,6 +780,25 @@ function getDayInfo(dayNumber) {
     13: 'Volum total (Tracțiuni 60 + Dips 80 + Squat 100)',
     14: 'Zi de odihnă — PROGRAMUL S-A ÎNCHEIAT!',
   };
+  
+  const scheduleOutdoor = {
+    1: 'Picioare, Piept și Abdomen',
+    2: 'Spate, Umeri, Abdomen și Lombari',
+    3: 'Brațe, Picioare și Gambe',
+    4: 'Cardio HIIT (sau zi de pauză dacă ești obosit)',
+    5: 'Circuit Total Body (6 exerciții × 6 runde)',
+    6: 'Volum total (Tracțiuni 50 + Dips 80 + Sumo Squat 100)',
+    7: 'Zi de odihnă',
+    8: 'Picioare (bază), Brațe, Abdomen',
+    9: 'Spate, Piept',
+    10: 'Umeri, Picioare, Gambe și Abdomen',
+    11: 'Cardio intervale',
+    12: 'Exerciții fundamentale + Grup muscular deficitar',
+    13: 'Volum total (Tracțiuni 60 + Dips 80 + Step-up, Plank, Fandări)',
+    14: 'Zi de odihnă — PROGRAMUL S-A ÎNCHEIAT!',
+  };
+  
+  const schedule = equipment === 'outdoor' ? scheduleOutdoor : scheduleGym;
   return schedule[dayNumber] || 'Antrenament';
 }
 
