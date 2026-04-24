@@ -783,27 +783,51 @@ Structura review-ului:
 // ============================================
 
 export async function generateAntiChurnMessage(profile, riskLevel, daysSinceLastActivity) {
-  const intensity = riskLevel === 'high' ? 'urgent dar empatic' : riskLevel === 'medium' ? 'prietenos și încurajator' : 'casual și ușor';
+  const intensity = riskLevel === 'high' 
+    ? 'Ferm dar empatic. Ancorează pe obiectivul lui concret.'
+    : riskLevel === 'medium' 
+    ? 'Prietenos, ancorat pe progresul făcut deja.'
+    : 'Ușor, fără presiune. Un simplu „mai ești pe aici?".';
+  
+  const goalText = profile.goal === 'fat_loss' 
+    ? 'pierdere de grăsime' 
+    : profile.goal === 'toning' 
+    ? 'tonifiere' 
+    : 'masă musculară';
   
   try {
     const response = await client.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 150,
-      system: `Ești Coach-ul AI PowerFit. Scrie un mesaj de re-engagement în română. Tonul: ${intensity}. Maxim 2-3 propoziții. Nu fi pasiv-agresiv. Nu culpabiliza.`,
+      max_tokens: 120,
+      system: `Ești Asistentul PowerFit, instruit de Sam. Scrii un mesaj scurt de re-engagement în ROMÂNĂ PURĂ — ZERO cuvinte englezești (fără "miss you", "app", "hey", etc. — folosește echivalentele românești: "îmi lipsești", "aplicație", "salut").
+
+Reguli stricte:
+- Maxim 2 propoziții scurte
+- Fără emoji inutile (maxim 1)
+- Fără culpabilizare ("ai ratat", "te-ai dat bătut")
+- Fără clișee ("consistency is key", "you got this")
+- Tratează clientul cu respect, nu ca pe un fugar
+- Tonul: ${intensity}
+
+NU folosește: "hey", "miss", "app", "let's go", "come back" sau alte expresii englezești.
+NU începe cu emoji.
+NU termina cu hashtag-uri.`,
       messages: [{
         role: 'user',
-        content: `Client: ${profile.full_name}
-Ziua din program: ${profile.current_day}/14
-Zile fără activitate: ${daysSinceLastActivity}
-Streak pierdut: ${profile.current_streak === 0 ? 'da' : 'nu'}
-Obiectiv: ${profile.goal}
-Nivel risc: ${riskLevel}`
+        content: `Profil client:
+- Nume: ${profile.full_name}
+- Obiectiv declarat: ${goalText}
+- Ziua în program: ${profile.current_day}/14
+- Zile fără activitate: ${daysSinceLastActivity}
+- Nivel risc: ${riskLevel}
+
+Scrie mesajul.`
       }]
     });
-    return response.content[0].text;
+    return response.content[0].text.trim();
   } catch (error) {
     console.error('Anti-churn message error:', error);
-    return `Hei ${profile.full_name}, am observat că nu ai fost activ recent. Totul ok? Sunt aici dacă ai nevoie. 💪`;
+    return `${profile.full_name}, am observat că nu ai mai intrat de ${daysSinceLastActivity} zile. Sunt aici dacă ai nevoie de ajustări.`;
   }
 }
 
