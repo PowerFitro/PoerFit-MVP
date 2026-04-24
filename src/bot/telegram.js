@@ -109,7 +109,7 @@ export function initBot() {
       
       const coachName = getCoachName();
       await bot.sendMessage(chatId,
-        'Am transmis mesajul tău! 📩\n\nEchipa de coaching va reveni către tine în cel mai scurt timp, de obicei în aceeași zi.\n\nÎntre timp, sunt aici dacă ai alte întrebări.'
+        'Am transmis mesajul tău! 📩\n\n' + coachName + ' va reveni către tine în cel mai scurt timp.\n\nÎntre timp, sunt aici dacă ai alte întrebări.'
       );
       
       try {
@@ -160,13 +160,13 @@ export function initBot() {
   // ============================================
   bot.onText(/\/help/, async (msg) => {
     await bot.sendMessage(msg.chat.id,
-     `*Asistent PowerFit*\n\n` +
-      `💬 *Scrie-mi orice întrebare* — Antrenament, nutriție, exerciții, dureri, progres. Răspund rapid.\n\n` +
-      `/status — Progresul tău și ziua curentă\n` +
+      `*Asistent PowerFit*\n\n` +
+      `💬 *Scrie orice întrebare* — Răspund instant despre antrenament, nutriție, exerciții\n\n` +
+      `📸 *Trimite o poză cu mâncarea* — Analizez caloriile și macro-urile\n\n` +
+      `/status — Vezi progresul tău\n` +
       `/checkin — Loghează antrenamentul de azi\n` +
-      `/coach — Trimite un mesaj echipei de coaching\n` +
-      `/help — Lista de comenzi\n\n` +
-      `Dacă ai nevoie de ajutor specific cu planul alimentar sau antrenamentul, scrie-mi în detaliu și te ghidez.`,
+      `/coach — Vorbește direct cu antrenorul\n` +
+      `/help — Această listă de comenzi`,
       { parse_mode: 'Markdown' }
     );
   });
@@ -369,6 +369,66 @@ export function initBot() {
     if (data === 'morning_question') {
       await bot.sendMessage(chatId, 'Scrie-mi întrebarea ta și răspund imediat! 💬');
     }
+    
+    // --- FILOZOFIA C: Recuperare sau Sari la zi ---
+    if (data === 'morning_recover') {
+      const recoveryDay = (profile.current_day || 0) + 1;
+      const dayInfo = getDayInfo(recoveryDay);
+      const isRest = recoveryDay === 7 || recoveryDay === 14;
+      
+      let msg = '💪 Bine, recuperăm!\n\n' +
+        `📋 *Ziua ${recoveryDay}:* ${dayInfo}\n\n`;
+      
+      if (isRest) {
+        msg += 'Azi e zi de odihnă. Respectă planul alimentar. Mâine continuăm.';
+      } else {
+        msg += 'Deschide lecția Ziua ' + recoveryDay + ' în PowerFit și urmează instrucțiunile. După antrenament, apasă butonul.';
+      }
+      
+      await bot.sendMessage(chatId, msg,
+        { 
+          parse_mode: 'Markdown',
+          reply_markup: isRest ? undefined : {
+            inline_keyboard: [[
+              { text: '✅ Am terminat antrenamentul', callback_data: 'workout_yes' }
+            ]]
+          }
+        }
+      );
+    }
+    
+    if (data === 'morning_skip_ahead') {
+      const calendarDay = getCalendarProgramDayLocal(profile.program_start_date);
+      const dayInfo = getDayInfo(calendarDay);
+      const isRest = calendarDay === 7 || calendarDay === 14;
+      
+      // Când sare, marchez zilele intermediare ca "skip" prin update current_day la calendarDay - 1
+      // (current_day reprezintă ultimul antrenament bifat; dacă sare la Ziua 5, avem nevoie să sară peste 3 și 4)
+      // Pentru acum, lăsăm current_day neschimbat și-l punem să facă direct ziua calendaristică.
+      // La /checkin urmează logica veche (current_day + 1) — va fi nevoie de ajustare suplimentară dacă sare multe zile.
+      
+      let msg = '⏩ Bine, sărim la zi!\n\n' +
+        `📋 *Ziua ${calendarDay}:* ${dayInfo}\n\n`;
+      
+      if (isRest) {
+        msg += 'Azi e zi de odihnă. Respectă planul alimentar. Mâine continuăm.';
+      } else {
+        msg += 'Deschide lecția Ziua ' + calendarDay + ' în PowerFit și urmează instrucțiunile. După antrenament, apasă butonul.';
+      }
+      
+      msg += '\n\n_Notă: zilele ' + ((profile.current_day || 0) + 1) + '-' + (calendarDay - 1) + ' rămân nebifate. Le poți face mai târziu dacă vrei, sau le lași așa._';
+      
+      await bot.sendMessage(chatId, msg,
+        { 
+          parse_mode: 'Markdown',
+          reply_markup: isRest ? undefined : {
+            inline_keyboard: [[
+              { text: '✅ Am terminat antrenamentul', callback_data: 'workout_yes' }
+            ]]
+          }
+        }
+      );
+    }
   });
 
   // ============================================
@@ -499,41 +559,90 @@ export function initBot() {
 // SEND FUNCTIONS (used by cron jobs)
 // ============================================
 
+// Helper: calculează ziua calendaristică în program (1-14) pe baza program_start_date
+function getCalendarProgramDayLocal(programStartDate) {
+  if (!programStartDate) return null;
+  const start = new Date(programStartDate + 'T00:00:00');
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  start.setHours(0, 0, 0, 0);
+  const diffDays = Math.floor((today - start) / (1000 * 60 * 60 * 24));
+  return diffDays + 1;
+}
+
 export async function sendMorningCheckin(profile) {
   if (!bot || !profile.telegram_chat_id) return;
   
-  const dayNumber = (profile.current_day || 0) + 1;
-  if (dayNumber > 14) return;
+  // Calculez contextul real al zilei (Filozofia C)
+  const calendarDay = getCalendarProgramDayLocal(profile.program_start_date);
+  const bifate = profile.current_day || 0;
+  const nextLogicDay = bifate + 1; // ce zi ar trebui să facă dacă recuperează
   
-  const dayInfo = getDayInfo(dayNumber);
-  const isRestDay = dayNumber === 7 || dayNumber === 14;
-  const isCardioDay = dayNumber === 4 || dayNumber === 11;
+  // Dacă programul nu a început încă, nu trimite morning checkin (pre-program logic e separat)
+  if (calendarDay === null || calendarDay <= 0) return;
+  
+  // Dacă programul calendaristic s-a încheiat și toate zilele sunt bifate, nu mai trimite
+  if (calendarDay > 14 && bifate >= 14) return;
+  
+  // Dacă a depășit fereastra de 21 de zile, nu mai trimite morning check-in
+  if (calendarDay > 21) return;
+  
+  const offset = calendarDay <= 14 ? (calendarDay - bifate) : null;
+  const isLate = offset !== null && offset > 0;
   
   let message = '';
+  let keyboard = [];
   
-  if (isRestDay) {
-    message = 'Buna dimineata, ' + profile.full_name + '!\n\n' +
-      'Ziua ' + dayNumber + '/14 — Zi de odihnă.\n\n' +
-      'Corpul tău se recuperează și crește azi. Respectă planul alimentar și odihnește-te. Mâine revenim la treabă.';
-  } else if (isCardioDay) {
-    message = 'Buna dimineata, ' + profile.full_name + '!\n\n' +
-      'Ziua ' + dayNumber + '/14 — ' + dayInfo + '\n\n' +
-      'Dacă simți oboseala acumulată după primele zile, ia o pauză completă azi. Programul se decalează cu o zi. Dacă te simți bine, hai la cardio!';
+  if (isLate) {
+    // SCENARIUL "ÎN URMĂ" — varianta A cu butoane de alegere (Filozofia C)
+    const recoveryDayInfo = getDayInfo(nextLogicDay);
+    const calendarDayInfo = getDayInfo(calendarDay);
+    const isRecoveryRest = nextLogicDay === 7 || nextLogicDay === 14;
+    const isCalendarRest = calendarDay === 7 || calendarDay === 14;
+    
+    message = 'Bună dimineața, ' + profile.full_name + '!\n\n' +
+      'Azi e Ziua ' + calendarDay + ' calendaristic, dar ai bifate ' + bifate + ' antrenamente. Ești cu ' + offset + (offset === 1 ? ' zi' : ' zile') + ' în urmă față de program.\n\n' +
+      'Ai două opțiuni:\n\n' +
+      '🔄 Recuperezi — faci Ziua ' + nextLogicDay + (isRecoveryRest ? ' (odihnă)' : ': ' + recoveryDayInfo) + '\n' +
+      '⏩ Sari la zi — faci direct Ziua ' + calendarDay + (isCalendarRest ? ' (odihnă)' : ': ' + calendarDayInfo) + '\n\n' +
+      'Alege mai jos sau scrie-mi dacă ai întrebări.';
+    
+    keyboard = [
+      [{ text: '🔄 Recuperez Ziua ' + nextLogicDay, callback_data: 'morning_recover' }],
+      [{ text: '⏩ Sar la Ziua ' + calendarDay, callback_data: 'morning_skip_ahead' }]
+    ];
   } else {
-    message = 'Buna dimineata, ' + profile.full_name + '!\n\n' +
-      'Ziua ' + dayNumber + '/14 — ' + dayInfo + '\n\n' +
-      'Deschide lecția în PowerFit și urmează instrucțiunile. După antrenament, apasă butonul de mai jos.';
+    // SCENARIUL "LA ZI" — logica veche, curățată cu diacritice
+    const dayNumber = calendarDay;
+    const dayInfo = getDayInfo(dayNumber);
+    const isRestDay = dayNumber === 7 || dayNumber === 14;
+    const isCardioDay = dayNumber === 4 || dayNumber === 11;
+    
+    if (isRestDay) {
+      message = 'Bună dimineața, ' + profile.full_name + '!\n\n' +
+        'Ziua ' + dayNumber + '/14 — Zi de odihnă.\n\n' +
+        'Corpul tău se recuperează și crește azi. Respectă planul alimentar și odihnește-te. Mâine revenim la treabă.';
+    } else if (isCardioDay) {
+      message = 'Bună dimineața, ' + profile.full_name + '!\n\n' +
+        'Ziua ' + dayNumber + '/14 — ' + dayInfo + '\n\n' +
+        'Dacă simți oboseala acumulată după primele zile, ia o pauză completă azi. Programul se decalează cu o zi. Dacă te simți bine, hai la cardio!';
+    } else {
+      message = 'Bună dimineața, ' + profile.full_name + '!\n\n' +
+        'Ziua ' + dayNumber + '/14 — ' + dayInfo + '\n\n' +
+        'Deschide lecția în PowerFit și urmează instrucțiunile. După antrenament, apasă butonul de mai jos.';
+    }
+    
+    keyboard = isRestDay ? [] : [[
+      { text: 'Am terminat antrenamentul', callback_data: 'workout_yes' }
+    ]];
   }
-  
-  const keyboard = isRestDay ? [] : [[
-    { text: 'Am terminat antrenamentul', callback_data: 'workout_yes' }
-  ]];
   
   await bot.sendMessage(profile.telegram_chat_id, message, 
     keyboard.length > 0 ? { reply_markup: { inline_keyboard: keyboard } } : {}
   );
   
-  await db.logNotification(profile.id, 'morning_checkin', 'telegram', 'Day ' + dayNumber + ' morning checkin');
+  const logSuffix = isLate ? ' (LATE, calendar=' + calendarDay + ', bifate=' + bifate + ')' : ' (on track)';
+  await db.logNotification(profile.id, 'morning_checkin', 'telegram', 'Calendar day ' + calendarDay + ' morning checkin' + logSuffix);
 }
 
 export async function sendEveningCheckin(profile) {
@@ -655,20 +764,20 @@ export async function sendPostProgramMessage(profile, daysSinceCompletion) {
 
 function getDayInfo(dayNumber) {
   const schedule = {
-    1: 'Picioare, Piept si Abdomen',
-    2: 'Spate, Umeri, Abdomen si Lombari',
-    3: 'Brate, Picioare si Gambe',
-    4: 'Cardio HIIT (sau zi de pauza daca esti obosit)',
-    5: 'Exercitii fundamentale + Grup muscular deficitar',
-    6: 'Volum total (Tractiuni 50 + Dips 80 + Squat 100)',
-    7: 'Zi de odihna',
-    8: 'Picioare (baza), Brate, Abdomen',
+    1: 'Picioare, Piept și Abdomen',
+    2: 'Spate, Umeri, Abdomen și Lombari',
+    3: 'Brațe, Picioare și Gambe',
+    4: 'Cardio HIIT (sau zi de pauză dacă ești obosit)',
+    5: 'Exerciții fundamentale + Grup muscular deficitar',
+    6: 'Volum total (Tracțiuni 50 + Dips 80 + Squat 100)',
+    7: 'Zi de odihnă',
+    8: 'Picioare (bază), Brațe, Abdomen',
     9: 'Spate, Piept',
-    10: 'Umeri, Picioare, Gambe si Abdomen',
+    10: 'Umeri, Picioare, Gambe și Abdomen',
     11: 'Cardio intervale',
-    12: 'Exercitii fundamentale + Grup muscular deficitar',
-    13: 'Volum total (Tractiuni 60 + Dips 80 + Squat 100)',
-    14: 'Zi de odihna - PROGRAMUL S-A INCHEIAT!',
+    12: 'Exerciții fundamentale + Grup muscular deficitar',
+    13: 'Volum total (Tracțiuni 60 + Dips 80 + Squat 100)',
+    14: 'Zi de odihnă — PROGRAMUL S-A ÎNCHEIAT!',
   };
   return schedule[dayNumber] || 'Antrenament';
 }
@@ -694,31 +803,31 @@ export async function sendPreProgramMessage(profile, startDate) {
   let message = '';
   
   if (daysUntilStart > 5) {
-    message = 'Buna dimineata, ' + profile.full_name + '! \u{1F4AA}\n\nProgramul tău de antrenament începe luni. Până atunci, ai câteva lucruri importante de parcurs:\n\n' +
+    message = 'Bună dimineața, ' + profile.full_name + '! \u{1F4AA}\n\nProgramul tău de antrenament începe luni. Până atunci, ai câteva lucruri importante de parcurs:\n\n' +
       '\u{1F4DA} Parcurge secțiunea "Informatii utile" - acolo găsești strategia completă de alimentație\n' +
       '\u{1F9EE} Calculează-ți macronutrienții — folosește calculatorul din curs sau scrie-mi aici sexul, greutatea și procentul de grăsime\n' +
       '\u{1F4F1} Descarcă o aplicație de tracking nutrițional\n\nAcești pași sunt esențiali înainte de prima zi de antrenament.';
   } else if (daysUntilStart > 3) {
-    message = 'Buna dimineata, ' + profile.full_name + '! \u{1F4AA}\n\n' +
+    message = 'Bună dimineața, ' + profile.full_name + '! \u{1F4AA}\n\n' +
       'Mai sunt ' + daysUntilStart + ' zile până la startul programului.\n\n' +
       'Ai calculat macronutrienții? Dacă nu, scrie-mi aici datele tale și te ajut instant.\n' +
       'Fă antrenamentul pregătitor azi — te va ajuta să intri în ritm luni.\n' +
       'Verifică lista de cumpărături din secțiunea Alimentație.';
   } else if (daysUntilStart >= 2) {
-    message = 'Buna dimineata, ' + profile.full_name + '! \u{1F4AA}\n\n' +
+    message = 'Bună dimineața, ' + profile.full_name + '! \u{1F4AA}\n\n' +
       'Mai sunt ' + daysUntilStart + ' zile! Fă antrenamentul pregătitor dacă nu l-ai făcut încă.\n\n' +
       'Verifică că ai totul pregătit:\n' +
       '- Macronutrienții calculați\n' +
       '- Ingredientele cumpărate\n' +
       '- Aplicația de tracking instalată\n\nLuni începem la intensitate maximă!';
   } else if (daysUntilStart === 1) {
-    message = 'Buna dimineata, ' + profile.full_name + '! \u{1F525}\n\n' +
+    message = 'Bună dimineața, ' + profile.full_name + '! \u{1F525}\n\n' +
       'Mâine începe programul! Ziua 1: antrenament complet + plan alimentar.\n\n' +
       'Diseară se deblochează Săptămâna 1.\n' +
       'Mâine dimineață la 8:00 primești primul reminder cu antrenamentul zilei.\n\n' +
       'Ești pregătit? \u{1F4AA}';
   } else {
-    message = 'Buna dimineata, ' + profile.full_name + '! \u{1F525}\n\n' +
+    message = 'Bună dimineața, ' + profile.full_name + '! \u{1F525}\n\n' +
       'Programul tău începe luni. Parcurge materialele din curs și pregătește-te!\n\n' +
       'Scrie-mi dacă ai întrebări.';
   }
