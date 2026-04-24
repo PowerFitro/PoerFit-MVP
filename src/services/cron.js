@@ -61,9 +61,9 @@ export function initCronJobs() {
   }, { timezone: 'Europe/Bucharest' });
 
   // ============================================
-  // La fiecare 6 ore — Anti-Churn Scan
+  // Anti-Churn Scan — DOAR la ore civilizate (11:00 și 17:00)
   // ============================================
-  cron.schedule('0 6,12,18,0 * * *', async () => {
+  cron.schedule('0 11,17 * * *', async () => {
     console.log('[CRON] Anti-churn scan starting...');
     try {
       const profiles = await db.getAllActiveProfiles();
