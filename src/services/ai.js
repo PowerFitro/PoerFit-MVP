@@ -3,6 +3,39 @@ import Anthropic from '@anthropic-ai/sdk';
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // ============================================
+// HELPER FUNCTIONS — Program day calculation
+// ============================================
+
+/**
+ * Calculează ziua calendaristică în program (1-14) pe baza program_start_date.
+ * Returnează 0 dacă programul nu a început încă.
+ * Returnează > 14 dacă programul s-a încheiat calendaristic.
+ */
+function getCalendarProgramDay(programStartDate) {
+  if (!programStartDate) return null;
+  const start = new Date(programStartDate + 'T00:00:00');
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  start.setHours(0, 0, 0, 0);
+  const diffMs = today - start;
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  return diffDays + 1; // Ziua 1 = ziua de start
+}
+
+/**
+ * Calculează decalajul între ce ar trebui (calendaristic) și ce a făcut (bifate).
+ * Pozitiv = în urmă. Zero = la zi. Negativ = nu se aplică (în avans nu există în PowerFit).
+ */
+function getProgramOffset(profile) {
+  const calendarDay = getCalendarProgramDay(profile.program_start_date);
+  const bifate = profile.current_day || 0;
+  if (calendarDay === null) return null;
+  if (calendarDay <= 0) return null; // Pre-program
+  if (calendarDay > 14) return null; // Calendar terminat
+  return calendarDay - bifate;
+}
+
+// ============================================
 // SYSTEM PROMPT - POWERFIT AI COACH
 // ============================================
 
@@ -493,6 +526,39 @@ CERERI CARE DEPĂȘESC PROGRAMUL:
 - "Am nevoie de plan alimentar pentru condiție medicală X" → /coach + recomandare nutriționist
 
 =============================================
+CUM INTERPRETEZI ZIUA CURENTĂ A CLIENTULUI
+=============================================
+Reguli STRICTE pentru a evita confuzia când clientul întreabă "ce am de făcut azi" sau ceva legat de progres:
+
+1. **Citești CONTEXTUL trimis în profilul clientului**:
+   - "Data de start program" = când a început calendaristic
+   - "Data de azi" = data curentă reală
+   - "Ziua calendaristică în program" = ce zi din 14 ar fi azi DACĂ ar fi la zi
+   - "Antrenamente bifate până acum" = câte a făcut efectiv
+   - "Status" = LA ZI / ÎN URMĂ / PRE-PROGRAM / DEPĂȘIT etc.
+
+2. **NU confunzi cele două:**
+   - "Antrenamente bifate" = istoric (ce a terminat)
+   - "Ziua calendaristică" = calendarul (ce ar trebui să facă azi)
+
+3. **Dacă clientul e LA ZI** → spune-i antrenamentul Zilei calendaristice. Direct, fără ezitare.
+
+4. **Dacă clientul e ÎN URMĂ** → recunoaște decalajul deschis, oferă opțiunea:
+   ✅ Bun: "Văd că azi e Ziua 4 calendaristic, dar ai bifate 2 antrenamente. Ești cu 2 zile în urmă. Vrei să recuperezi (faci Ziua 3 azi), sau sări direct la Ziua 4?"
+   ❌ Rău: "Hai să continuăm streak-ul!" (dacă e în urmă, nu are streak)
+   ❌ Rău: "Nu am acces la ce ai bifat" (FALS — ai access, e în context)
+
+5. **Dacă clientul e în PRE-PROGRAM** (programul nu a început) → NU îi da antrenamentul Zilei 1. Trimite-l la materialele de pregătire.
+
+6. **Dacă clientul e DEPĂȘIT** (peste 21 zile de la start) → escaladează la /coach. Nu mai dai antrenamente noi.
+
+7. **Dacă clientul e în BONUS WINDOW** (zile 15-21) → încurajează-l să termine cele 14 antrenamente, dar amintește că fereastra se închide.
+
+8. **NICIODATĂ nu spune** "nu am acces la ce ai făcut" sau "nu pot vedea exact". Ai access la TOT ce e în profil. Folosește datele.
+
+9. **Dacă clientul te corectează** despre ziua curentă → verifică cu datele din profil, nu cu memoria conversației. Răspunde cu certitudine, nu defensiv.
+
+=============================================
 REGULI DE RĂSPUNS
 =============================================
 
@@ -525,6 +591,39 @@ REGULI SPECIFICE:
 // ============================================
 
 export async function getChatResponse(userMessage, conversationHistory, userProfile) {
+  // Calculează context calendaristic
+  let programStatus = '';
+  if (userProfile) {
+    const calendarDay = getCalendarProgramDay(userProfile.program_start_date);
+    const bifate = userProfile.current_day || 0;
+    const offset = getProgramOffset(userProfile);
+    
+    if (calendarDay === null) {
+      programStatus = '\n- Status program: Nu are dată de start setată';
+    } else if (calendarDay <= 0) {
+      const daysUntilStart = Math.abs(calendarDay) + 1;
+      programStatus = `\n- Status program: PRE-PROGRAM. Programul începe în ${daysUntilStart} zile (luni ${userProfile.program_start_date}). NU îi da antrenamentul Ziua 1 încă — trimite-l să se pregătească (macronutrienți, lista cumpărături).`;
+    } else if (calendarDay > 21) {
+      programStatus = `\n- Status program: DEPĂȘIT. Au trecut ${calendarDay} zile de la start (max permis 21). Programul s-a închis. A bifat ${bifate}/14 antrenamente. Recomandă /coach pentru continuare cu Sam personal.`;
+    } else if (calendarDay > 14) {
+      programStatus = `\n- Status program: BONUS WINDOW. Calendaristic ar fi Ziua ${calendarDay} (peste 14), a bifate ${bifate}/14. Are timp până la 21 zile de la start să termine, după aceea programul se închide. Încurajează-l să recupereze.`;
+    } else {
+      // În program activ (Ziua 1-14 calendaristic)
+      let statusLine = `\n- Ziua calendaristică în program: ${calendarDay}/14 (azi)`;
+      statusLine += `\n- Antrenamente bifate până acum: ${bifate}/14`;
+      
+      if (offset === 0) {
+        statusLine += `\n- Status: LA ZI. Azi trebuie să facă Ziua ${calendarDay}.`;
+      } else if (offset > 0) {
+        statusLine += `\n- Status: ÎN URMĂ cu ${offset} ${offset === 1 ? 'antrenament' : 'antrenamente'}. Calendaristic e Ziua ${calendarDay}, dar a bifat doar ${bifate}. Următorul antrenament logic = Ziua ${bifate + 1}. Întreabă-l dacă vrea să recupereze (face Ziua ${bifate + 1}) sau să sară direct la Ziua ${calendarDay}.`;
+      } else {
+        statusLine += `\n- Status: La zi sau ușor înainte (a bifat ${bifate}, calendar ${calendarDay}).`;
+      }
+      
+      programStatus = statusLine;
+    }
+  }
+  
   const profileContext = userProfile ? `
 PROFILUL CLIENTULUI:
 - Nume: ${userProfile.full_name}
@@ -534,7 +633,8 @@ PROFILUL CLIENTULUI:
 - Nivel: ${userProfile.experience_level}
 - Echipament: ${userProfile.equipment}
 - Obiectiv: ${userProfile.goal === 'fat_loss' ? 'Pierdere grăsime' : userProfile.goal === 'toning' ? 'Tonifiere' : 'Masă musculară'}
-- Ziua curentă: ${userProfile.current_day}/14
+- Data de start program: ${userProfile.program_start_date || 'nesetată'}
+- Data de azi: ${new Date().toISOString().split('T')[0]}${programStatus}
 - Streak: ${userProfile.current_streak} zile
 - Nivel gamification: ${userProfile.current_level}
 - Restricții alimentare: ${userProfile.dietary_restrictions?.join(', ') || 'Niciuna'}` : '';
