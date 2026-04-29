@@ -591,7 +591,7 @@ REGULI SPECIFICE:
 // AI COACH - Chat Response
 // ============================================
 
-export async function getChatResponse(userMessage, conversationHistory, userProfile) {
+export async function getChatResponse(userMessage, conversationHistory, userProfile, todayWorkout = null) {
   // Calculează context calendaristic
   let programStatus = '';
   if (userProfile) {
@@ -652,7 +652,7 @@ PROFILUL CLIENTULUI:
     const response = await client.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 500,
-      system: COACH_SYSTEM_PROMPT + profileContext,
+      system: COACH_SYSTEM_PROMPT + buildTimeContext(todayWorkout) + profileContext,
       messages: messages.slice(-10) // Ultimele 10 mesaje pentru context
     });
 
