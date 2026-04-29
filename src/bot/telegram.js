@@ -537,9 +537,18 @@ export function initBot() {
       
       // Send typing indicator
       await bot.sendChatAction(chatId, 'typing');
-      
+
+      // Citim checkin-ul de azi (dacă există) — botul trebuie să știe dacă a antrenat deja
+      let todayWorkout = null;
+      try {
+        const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Bucharest' });
+        const recentCheckins = await db.getRecentCheckins(profile.id, 1);
+        todayWorkout = recentCheckins.find(c => c.checkin_date === today && c.checkin_type === 'workout') || null;
+      } catch (e) {
+        console.error('Today workout fetch error:', e.message);
+      }
       // Get AI response
-      const response = await ai.getChatResponse(msg.text, history, profile);
+      const response = await ai.getChatResponse(msg.text, history, profile, todayWorkout);
       
       // Save AI response
       await db.saveMessage(profile.id, 'assistant', response);
