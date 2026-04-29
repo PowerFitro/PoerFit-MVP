@@ -832,7 +832,37 @@ Scrie mesajul.`
   }
 }
 
+// ============================================
+// AI WELCOME MESSAGE
+// ============================================
+
 export async function generateWelcomeMessage(profile) {
+  const programName = profile.equipment === 'gym' ? 'Antrenament la sală' : 'Antrenament în aer liber';
+  const goalText = profile.goal === 'fat_loss' ? 'pierdere grăsime' : profile.goal === 'toning' ? 'tonifiere' : 'creștere masă musculară';
+
+  try {
+    const response = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 200,
+      system: 'Ești Asistentul PowerFit, instruit de Sam. Scrie un mesaj de bun venit cald și energic în română. Maxim 4-5 propoziții. Include informații specifice din profilul clientului.',
+      messages: [{
+        role: 'user',
+        content: `Client nou:
+Nume: ${profile.full_name}
+Obiectiv: ${goalText}
+Program selectat: ${programName}
+Nivel experiență: ${profile.experience_level}
+Zile disponibile: ${profile.available_days}/săptămână
+
+Menționează: programul selectat, că mâine dimineață la 8:00 primește primul reminder, și că poate scrie oricând pentru întrebări.`
+      }]
+    });
+    return response.content[0].text;
+  } catch (error) {
+    return `Bine ai venit în PowerFit, ${profile.full_name}! 💪\n\nȚi-am pregătit programul de ${programName} bazat pe obiectivul tău de ${goalText}.\n\nMâine dimineață la 8:00 primești primul reminder. Între timp, poți să-mi scrii oricând dacă ai întrebări.\n\nHai să începem! 🔥`;
+  }
+}
+
 // ============================================
 // AI CONTEXT SUMMARY (Memory Layer)
 // ============================================
@@ -910,31 +940,5 @@ Generează rezumatul actualizat. Răspunde DOAR cu rezumatul, fără preambul.`
     console.error('Context summary generation error:', error.message);
     // Fallback: păstrăm summary-ul vechi dacă eșuează generarea
     return oldSummary || null;
-  }
-}
-  
-  const programName = profile.equipment === 'gym' ? 'Antrenament la sală' : 'Antrenament în aer liber';
-  const goalText = profile.goal === 'fat_loss' ? 'pierdere grăsime' : profile.goal === 'toning' ? 'tonifiere' : 'creștere masă musculară';
-
-  try {
-    const response = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 200,
-      system: 'Ești Asistentul PowerFit, instruit de Sam. Scrie un mesaj de bun venit cald și energic în română. Maxim 4-5 propoziții. Include informații specifice din profilul clientului.',
-      messages: [{
-        role: 'user',
-        content: `Client nou:
-Nume: ${profile.full_name}
-Obiectiv: ${goalText}
-Program selectat: ${programName}
-Nivel experiență: ${profile.experience_level}
-Zile disponibile: ${profile.available_days}/săptămână
-
-Menționează: programul selectat, că mâine dimineață la 8:00 primește primul reminder, și că poate scrie oricând pentru întrebări.`
-      }]
-    });
-    return response.content[0].text;
-  } catch (error) {
-    return `Bine ai venit în PowerFit, ${profile.full_name}! 💪\n\nȚi-am pregătit programul de ${programName} bazat pe obiectivul tău de ${goalText}.\n\nMâine dimineață la 8:00 primești primul reminder. Între timp, poți să-mi scrii oricând dacă ai întrebări.\n\nHai să începem! 🔥`;
   }
 }
