@@ -179,6 +179,46 @@ export async function getRecentConversation(userId, limit = 10) {
 }
 
 // ============================================
+// CONTEXT SUMMARY (Memory Layer)
+// ============================================
+
+export async function updateContextSummary(userId, summary) {
+  const { error } = await supabase
+    .from('user_profiles')
+    .update({ 
+      context_summary: summary, 
+      summary_updated_at: new Date().toISOString() 
+    })
+    .eq('id', userId);
+  if (error) throw error;
+}
+
+// Numără mesajele utilizator (role='user') de la ultima rezumare.
+// Returnează numărul total dacă summary nu a fost generat niciodată.
+export async function countMessagesSinceLastSummary(userId) {
+  const { data: profile, error: profileErr } = await supabase
+    .from('user_profiles')
+    .select('summary_updated_at')
+    .eq('id', userId)
+    .single();
+  if (profileErr) throw profileErr;
+  
+  let query = supabase
+    .from('conversations')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .eq('role', 'user');
+  
+  // Dacă există summary anterior, numărăm doar mesajele DUPĂ acel timestamp
+  if (profile?.summary_updated_at) {
+    query = query.gt('created_at', profile.summary_updated_at);
+  }
+  
+  const { count, error } = await query;
+  if (error) throw error;
+  return count || 0;
+}
+// ============================================
 // NOTIFICATIONS
 // ============================================
 
