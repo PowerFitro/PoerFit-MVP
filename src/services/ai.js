@@ -833,6 +833,86 @@ Scrie mesajul.`
 }
 
 export async function generateWelcomeMessage(profile) {
+// ============================================
+// AI CONTEXT SUMMARY (Memory Layer)
+// ============================================
+// Generează un rezumat structurat al ultimelor mesaje, folosind Haiku.
+// Pattern: "rolling summary" — primește summary-ul vechi + mesajele noi
+// și produce un summary actualizat. Astfel, contextul botului rămâne
+// scurt indiferent câte luni de istoric are clientul.
+
+export async function generateContextSummary(profile, oldSummary, newMessages) {
+  // Nu generăm summary dacă nu sunt măcar 5 mesaje noi — nu merită costul
+  if (!newMessages || newMessages.length < 5) {
+    return oldSummary || null;
+  }
+  
+  // Formatăm mesajele într-un format compact pentru Haiku
+  const messagesText = newMessages
+    .map(m => `${m.role === 'user' ? 'Client' : 'Bot'}: ${m.content}`)
+    .join('\n');
+  
+  const oldSummaryBlock = oldSummary 
+    ? `\n\nREZUMAT ANTERIOR (de actualizat):\n${oldSummary}` 
+    : '\n\n(Acesta e primul rezumat — nu există istoric anterior.)';
+  
+  try {
+    const response = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 600,
+      system: `Ești un sistem care menține memoria pe termen lung a unui antrenor digital pentru fitness (PowerFit). Job-ul tău: produci un rezumat structurat al interacțiunilor între client și bot, care va fi injectat în context-ul botului la conversații viitoare.
+
+REGULI STRICTE:
+- Maxim 350 cuvinte în total
+- Limbă: română cu diacritice complete
+- Format: secțiuni clare cu headere în MAJUSCULE (vezi exemplu)
+- Păstrezi DOAR informații care vor fi relevante peste săptămâni: dureri recurente, preferințe alimentare descoperite, blocaje mentale, momente de breakthrough, ajustări la program
+- IGNORI: confirmări scurte ("ok", "da", "mulțumesc"), detalii pasagere, repetări
+- Dacă există REZUMAT ANTERIOR, îl actualizezi (păstrezi info veche relevantă, adaugi info nouă, ștergi info învechită)
+- NU inventezi detalii — folosești doar ce e în mesaje
+- NU folosești cuvinte englezești
+
+FORMAT OBLIGATORIU (folosește exact aceste headere, omite secțiuni dacă nu ai date):
+
+DURERI/RESTRICȚII FIZICE:
+[ex: durere cot stâng la împins bară — alternative validate]
+
+PREFERINȚE ALIMENTARE DESCOPERITE:
+[ex: nu suportă lactate; preferă peștele dimineața]
+
+BLOCAJE MENTALE/EMOȚIONALE:
+[ex: lipsă motivație lunea; tendință auto-sabotaj la mese]
+
+MOMENTE CHEIE:
+[ex: 22 apr — primul antrenament la dificultate 4/5; 25 apr — mărturisire că vrea să renunțe]
+
+AJUSTĂRI ACTIVE LA PROGRAM:
+[ex: face Ziua 8 în loc de Ziua 10 din decalaj]
+
+NOTE COACH:
+[ex: răspunde mai bine la mesaje scurte și concrete]`,
+      messages: [{
+        role: 'user',
+        content: `Profil client:
+- Nume: ${profile.full_name}
+- Obiectiv: ${profile.goal}
+- Ziua program: ${profile.current_day}/14${oldSummaryBlock}
+
+MESAJE NOI DE ANALIZAT:
+${messagesText}
+
+Generează rezumatul actualizat. Răspunde DOAR cu rezumatul, fără preambul.`
+      }]
+    });
+    
+    return response.content[0].text.trim();
+  } catch (error) {
+    console.error('Context summary generation error:', error.message);
+    // Fallback: păstrăm summary-ul vechi dacă eșuează generarea
+    return oldSummary || null;
+  }
+}
+  
   const programName = profile.equipment === 'gym' ? 'Antrenament la sală' : 'Antrenament în aer liber';
   const goalText = profile.goal === 'fat_loss' ? 'pierdere grăsime' : profile.goal === 'toning' ? 'tonifiere' : 'creștere masă musculară';
 
