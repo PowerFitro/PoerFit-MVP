@@ -3,7 +3,6 @@ import { addPoints, updateStreak } from '../db/supabase.js';
 // ============================================
 // POINTS CONFIGURATION
 // ============================================
-
 export const POINTS = {
   WORKOUT_COMPLETE: 15,
   NUTRITION_CHECKIN: 10,
@@ -24,63 +23,39 @@ export const LEVELS = {
 // ============================================
 // PROCESS WORKOUT COMPLETION
 // ============================================
-
 export async function processWorkoutCompletion(userId) {
-  const result = await addPoints(userId, POINTS.WORKOUT_COMPLETE, 'workout_complete');
-  
-  // Check streak bonuses
-  const streakBonuses = [];
-  if (result) {
-    const profile = result; // addPoints returns updated data
-    // Streak bonuses are checked separately after streak update
-  }
-  
-  return result;
+  // Adaugă punctele de bază pentru workout completat.
+  // Bonusurile de streak se adaugă separat din processStreakBonus,
+  // după ce streak-ul e calculat în telegram.js.
+  return await addPoints(userId, POINTS.WORKOUT_COMPLETE, 'workout_complete');
 }
 
 // ============================================
 // PROCESS STREAK & BONUSES
 // ============================================
-
 export async function processStreakBonus(userId, currentStreak) {
   const bonuses = [];
   
   if (currentStreak === 3) {
-    const r = await addPoints(userId, POINTS.STREAK_3, 'streak_3');
-    bonuses.push({ points: POINTS.STREAK_3, reason: '3 zile consecutive!' });
+    await addPoints(userId, POINTS.STREAK_3, 'streak_3');
+    bonuses.push({ points: POINTS.STREAK_3, reason: '3 zile consecutive' });
   }
   if (currentStreak === 7) {
-    const r = await addPoints(userId, POINTS.STREAK_7, 'streak_7');
-    bonuses.push({ points: POINTS.STREAK_7, reason: '7 zile consecutive!' });
+    await addPoints(userId, POINTS.STREAK_7, 'streak_7');
+    bonuses.push({ points: POINTS.STREAK_7, reason: '7 zile consecutive' });
   }
   if (currentStreak === 14) {
-    const r = await addPoints(userId, POINTS.STREAK_14, 'streak_14');
-    bonuses.push({ points: POINTS.STREAK_14, reason: 'Program complet — 14 zile!' });
+    await addPoints(userId, POINTS.STREAK_14, 'streak_14');
+    bonuses.push({ points: POINTS.STREAK_14, reason: 'Program complet — 14 zile' });
   }
   
   return bonuses;
 }
 
 // ============================================
-// FORMAT LEVEL-UP MESSAGE
+// FORMAT MESSAGES (legacy — păstrate pentru tracking intern)
 // ============================================
-
-export function formatLevelUpMessage(previousLevel, newLevel, totalPoints) {
-  const prev = LEVELS[previousLevel];
-  const next = LEVELS[newLevel];
-  
-  return `🏆 *LEVEL UP!*\n\n${prev.emoji} ${prev.name} → ${next.emoji} *${next.name}*\n\nAi acumulat *${totalPoints} puncte*.\nContinuă așa! 💪`;
-}
-
-export function formatStreakMessage(streak) {
-  if (streak === 3) return `🔥 *3 zile consecutive!* +${POINTS.STREAK_3} puncte bonus!`;
-  if (streak === 7) return `🔥🔥 *7 zile consecutive!* O săptămână completă! +${POINTS.STREAK_7} puncte bonus!`;
-  if (streak === 14) return `🔥🔥🔥 *14 zile consecutive!* Ai terminat programul fără nicio pauză! +${POINTS.STREAK_14} puncte bonus! Ești o mașină!`;
-  if (streak >= 5) return `🔥 *${streak} zile consecutive!* Consistency bate intensity!`;
-  return null;
-}
-
-export function formatPointsSummary(profile) {
-  const level = LEVELS[profile.current_level] || LEVELS.rookie;
-  return `${level.emoji} *${level.name}* — ${profile.total_points} puncte | 🔥 Streak: ${profile.current_streak} zile`;
-}
+// IMPORTANT: aceste funcții NU mai sunt apelate în mesaje user-facing
+// după decizia "gamification invizibilă" (Commit 2).
+// Sunt păstrate ca foundation dacă reactivăm dashboard-ul gamificat.
+// Paste-urile rupte din versiunea anterioară au f
