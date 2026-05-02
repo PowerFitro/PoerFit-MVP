@@ -54,6 +54,29 @@ export function getRomaniaTime() {
  * - "îmi e foame" la 22:00 → bot știe că e seară târzie
  * - "ce mănânc" la 6:00 → bot știe că e dimineață devreme
  */
+/**
+ * Returnează data curentă în Europe/Bucharest ca string YYYY-MM-DD.
+ * Înlocuitor pentru new Date().toISOString().split('T')[0] care folosea UTC.
+ */
+export function getRomaniaDate() {
+  return getRomaniaTime().dateString;
+}
+
+/**
+ * Calculează ziua calendaristică în program (1-14) folosind data RO.
+ * Returnează null dacă programStartDate lipsește.
+ * Returnează 0 sau negativ dacă programul nu a început încă.
+ * Returnează > 14 dacă programul s-a încheiat calendaristic.
+ */
+export function getCalendarProgramDay(programStartDate) {
+  if (!programStartDate) return null;
+  const todayRO = getRomaniaTime().dateString;
+  const start = new Date(programStartDate + 'T00:00:00');
+  const today = new Date(todayRO + 'T00:00:00');
+  const diffMs = today - start;
+  const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+  return diffDays + 1;
+}
 export function getTimeWindow(hour) {
   if (hour >= 5 && hour < 10) {
     return {
