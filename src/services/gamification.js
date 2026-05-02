@@ -13,20 +13,17 @@ export const POINTS = {
 };
 
 export const LEVELS = {
-  rookie:   { min: 0,   emoji: '🥉', name: 'Rookie',   nameRo: 'Începător' },
-  fighter:  { min: 50,  emoji: '🥊', name: 'Fighter',  nameRo: 'Luptător' },
-  warrior:  { min: 150, emoji: '⚔️', name: 'Warrior',  nameRo: 'Războinic' },
-  champion: { min: 300, emoji: '🏆', name: 'Champion', nameRo: 'Campion' },
-  legend:   { min: 450, emoji: '👑', name: 'Legend',   nameRo: 'Legendă' },
+  rookie:   { min: 0,   emoji: 'medal', name: 'Rookie',   nameRo: 'Incepator' },
+  fighter:  { min: 50,  emoji: 'glove', name: 'Fighter',  nameRo: 'Luptator' },
+  warrior:  { min: 150, emoji: 'sword', name: 'Warrior',  nameRo: 'Razboinic' },
+  champion: { min: 300, emoji: 'cup',   name: 'Champion', nameRo: 'Campion' },
+  legend:   { min: 450, emoji: 'crown', name: 'Legend',   nameRo: 'Legenda' },
 };
 
 // ============================================
 // PROCESS WORKOUT COMPLETION
 // ============================================
 export async function processWorkoutCompletion(userId) {
-  // Adaugă punctele de bază pentru workout completat.
-  // Bonusurile de streak se adaugă separat din processStreakBonus,
-  // după ce streak-ul e calculat în telegram.js.
   return await addPoints(userId, POINTS.WORKOUT_COMPLETE, 'workout_complete');
 }
 
@@ -35,7 +32,7 @@ export async function processWorkoutCompletion(userId) {
 // ============================================
 export async function processStreakBonus(userId, currentStreak) {
   const bonuses = [];
-  
+
   if (currentStreak === 3) {
     await addPoints(userId, POINTS.STREAK_3, 'streak_3');
     bonuses.push({ points: POINTS.STREAK_3, reason: '3 zile consecutive' });
@@ -46,16 +43,30 @@ export async function processStreakBonus(userId, currentStreak) {
   }
   if (currentStreak === 14) {
     await addPoints(userId, POINTS.STREAK_14, 'streak_14');
-    bonuses.push({ points: POINTS.STREAK_14, reason: 'Program complet — 14 zile' });
+    bonuses.push({ points: POINTS.STREAK_14, reason: 'Program complet 14 zile' });
   }
-  
+
   return bonuses;
 }
 
 // ============================================
-// FORMAT MESSAGES (legacy — păstrate pentru tracking intern)
+// FORMAT MESSAGES (legacy)
 // ============================================
-// IMPORTANT: aceste funcții NU mai sunt apelate în mesaje user-facing
-// după decizia "gamification invizibilă" (Commit 2).
-// Sunt păstrate ca foundation dacă reactivăm dashboard-ul gamificat.
-// Paste-urile rupte din versiunea anterioară au f
+export function formatLevelUpMessage(previousLevel, newLevel, totalPoints) {
+  const prev = LEVELS[previousLevel] || LEVELS.rookie;
+  const next = LEVELS[newLevel] || LEVELS.rookie;
+  return 'LEVEL UP! ' + prev.name + ' -> ' + next.name + '. Ai ' + totalPoints + ' puncte.';
+}
+
+export function formatStreakMessage(streak) {
+  if (streak === 3) return '3 zile consecutive! +' + POINTS.STREAK_3 + ' puncte bonus.';
+  if (streak === 7) return '7 zile consecutive! +' + POINTS.STREAK_7 + ' puncte bonus.';
+  if (streak === 14) return '14 zile consecutive! Program complet. +' + POINTS.STREAK_14 + ' puncte bonus.';
+  if (streak >= 5) return streak + ' zile consecutive.';
+  return null;
+}
+
+export function formatPointsSummary(profile) {
+  const level = LEVELS[profile.current_level] || LEVELS.rookie;
+  return level.name + ' - ' + profile.total_points + ' puncte | Streak: ' + profile.current_streak + ' zile';
+}
