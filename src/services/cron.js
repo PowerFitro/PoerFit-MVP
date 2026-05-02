@@ -1,6 +1,7 @@
 import cron from 'node-cron';
 import * as db from '../db/supabase.js';
 import { sendMorningCheckin, sendEveningCheckin, sendAntiChurnMessage, sendWeeklyReview, sendPostProgramMessage, sendPreProgramMessage } from '../bot/telegram.js';
+import { getRomaniaDate } from '../utils/helpers.js';
 
 export function initCronJobs() {
   
@@ -11,7 +12,7 @@ export function initCronJobs() {
     console.log('[CRON] Morning check-in starting...');
     try {
       const profiles = await db.getAllActiveProfiles();
-      const today = new Date().toISOString().split('T')[0];
+      const today = getRomaniaDate();
       
       for (const profile of profiles) {
         const alreadySent = await db.wasNotificationSentToday(profile.id, 'morning_checkin');
@@ -42,7 +43,7 @@ export function initCronJobs() {
     console.log('[CRON] Evening check-in starting...');
     try {
       const profiles = await db.getAllActiveProfiles();
-      const today = new Date().toISOString().split('T')[0];
+      const today = getRomaniaDate();
       
       for (const profile of profiles) {
         // Skip pre-program users (no evening check-in before start)
