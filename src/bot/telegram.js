@@ -431,78 +431,7 @@ export function initBot() {
     }
   });
 
-  // ============================================
-  // PHOTO MESSAGE — Food Log
-  // ============================================
-  // DISABLED: Food photo analysis
-  /* bot.on('photo_disabled', async (msg) => {
-    const chatId = msg.chat.id;
-    const profile = await db.getProfileByTelegramId(msg.from.id);
-    
-    if (!profile) {
-      await bot.sendMessage(chatId, 'Trebuie să te conectezi mai întâi. Scrie /start');
-      return;
-    }
-    
-    await bot.sendMessage(chatId, '🔍 Analizez masa ta...');
-    
-    try {
-      // Get photo file
-      const photo = msg.photo[msg.photo.length - 1]; // Highest resolution
-      const file = await bot.getFile(photo.file_id);
-      const fileUrl = `https://api.telegram.org/file/bot${process.env.TELEGRAM_BOT_TOKEN}/${file.file_path}`;
-      
-      // Download and convert to base64
-      const base64 = await downloadAsBase64(fileUrl);
-      
-      // Analyze with Claude Vision
-      const analysis = await ai.analyzeFoodPhoto(base64, profile);
-      
-      if (analysis) {
-        // Save to food log
-        const today = new Date().toISOString().split('T')[0];
-        await db.saveFoodLog({
-          user_id: profile.id,
-          log_date: today,
-          meal_type: 'other',
-          description: analysis.description,
-          estimated_calories: analysis.calories,
-          protein_g: analysis.protein,
-          fat_g: analysis.fat,
-          carbs_g: analysis.carbs,
-          ai_feedback: analysis.feedback,
-          photo_file_id: photo.file_id
-        });
-        
-        // Add points for food logging
-        const pointsResult = await db.addPoints(profile.id, POINTS.FOOD_LOG_PHOTO, 'food_log');
-        
-        // Get today's totals
-        const todayLogs = await db.getTodayFoodLogs(profile.id);
-        const totalCals = todayLogs.reduce((sum, l) => sum + (l.estimated_calories || 0), 0);
-        const totalProtein = todayLogs.reduce((sum, l) => sum + (l.protein_g || 0), 0);
-        const target = profile.daily_calorie_target || 2000;
-        
-        await bot.sendMessage(chatId,
-          `🍽️ *${analysis.description}*\n\n` +
-          `🔸 Calorii: *${analysis.calories}* kcal\n` +
-          `🔸 Proteine: *${analysis.protein}*g\n` +
-          `🔸 Grăsimi: *${analysis.fat}*g\n` +
-          `🔸 Carbohidrați: *${analysis.carbs}*g\n\n` +
-          `${analysis.feedback}\n\n` +
-          `📊 *Total azi:* ${totalCals}/${target} kcal | ${totalProtein.toFixed(0)}g proteine\n` +
-          `🍽️ Mese logate: ${todayLogs.length}\n` +
-          `+${POINTS.FOOD_LOG_PHOTO} puncte`,
-          { parse_mode: 'Markdown' }
-        );
-      } else {
-        await bot.sendMessage(chatId, 'Nu am reușit să analizez poza. Încearcă cu o poză mai clară, de sus, cu toată masa vizibilă. 📸');
-      }
-    } catch (error) {
-      console.error('Photo processing error:', error);
-      await bot.sendMessage(chatId, 'A apărut o eroare la procesarea pozei. Încearcă din nou.');
-    }
-  }); */
+  
 
   // ============================================
   // TEXT MESSAGE — Asistentul PowerFit Chat
