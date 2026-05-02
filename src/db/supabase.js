@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { getRomaniaDate } from '../utils/helpers.js';
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -146,7 +147,7 @@ export async function saveFoodLog(logData) {
 }
 
 export async function getTodayFoodLogs(userId) {
-  const today = new Date().toISOString().split('T')[0];
+  const today = getRomaniaDate();
   const { data, error } = await supabase
     .from('food_logs')
     .select('*')
@@ -230,7 +231,7 @@ export async function logNotification(userId, type, channel, content) {
 }
 
 export async function wasNotificationSentToday(userId, type) {
-  const today = new Date().toISOString().split('T')[0];
+  const today = getRomaniaDate();
   const { data, error } = await supabase
     .from('notifications_log')
     .select('id')
