@@ -1,7 +1,7 @@
 import TelegramBot from 'node-telegram-bot-api';
 import * as db from '../db/supabase.js';
 import * as ai from '../services/ai.js';
-import { POINTS, processWorkoutCompletion, processStreakBonus, formatLevelUpMessage, formatStreakMessage, formatPointsSummary, LEVELS } from '../services/gamification.js';
+import { processWorkoutCompletion, processStreakBonus } from '../services/gamification.js';
 import https from 'https';
 
 let bot;
@@ -26,8 +26,7 @@ export function initBot() {
       
       if (profile) {
         await bot.sendMessage(chatId, 
-          `Bine ai revenit, ${profile.full_name}! 💪\n\n${formatPointsSummary(profile)}\n\nScrie-mi oricând dacă ai întrebări despre antrenament sau nutriție. Poți trimite și o poză cu masa ta pentru feedback.`,
-          { parse_mode: 'Markdown' }
+          `Bine ai revenit, ${profile.full_name}!\n\nEști la Ziua ${profile.current_day}/14 din program.\n\nScrie-mi oricând dacă ai întrebări despre antrenament sau nutriție.`
         );
         return;
       }
@@ -93,9 +92,8 @@ export function initBot() {
       const adminChatId = process.env.TELEGRAM_ADMIN_CHAT_ID;
       if (adminChatId) {
         try {
-          const level = LEVELS[profile.current_level] || LEVELS.rookie;
           await bot.sendMessage(adminChatId,
-            '⚠️ ESCALADARE\n\n' +
+            'ESCALADARE\n\n' +
             'Client: ' + profile.full_name + '\n' +
             'Email: ' + profile.email + '\n' +
             'Ziua: ' + profile.current_day + '/14\n' +
@@ -136,23 +134,19 @@ export function initBot() {
     }
     
     const stats = await db.getCheckinStats(profile.id);
-    const level = LEVELS[profile.current_level] || LEVELS.rookie;
-    const todayFoodLogs = await db.getTodayFoodLogs(profile.id);
+    const bifate = profile.current_day || 0;
+    const ramase = Math.max(0, 14 - bifate);
+    const avgDiff = stats.avgDifficulty ? stats.avgDifficulty.toFixed(1) : '—';
     
-    const progress = Math.round((profile.current_day / 14) * 100);
-    const progressBar = generateProgressBar(progress);
+    let message = `Ești la Ziua ${bifate}/14, ai bifat ${stats.totalWorkouts} antrenamente.\n`;
+    if (ramase > 0) {
+      message += `Mai ai ${ramase} ${ramase === 1 ? 'zi' : 'zile'} până la final.\n\n`;
+    } else {
+      message += `Programul s-a încheiat. Felicitări!\n\n`;
+    }
+    message += `Dificultate medie: ${avgDiff}/5\n\nȚine-o tot așa.`;
     
-    await bot.sendMessage(chatId,
-      `📊 *Statusul tău PowerFit*\n\n` +
-      `${progressBar} ${progress}%\n` +
-      `📅 Ziua *${profile.current_day}* din 14\n\n` +
-      `${level.emoji} Nivel: *${level.name}* (${profile.total_points} puncte)\n` +
-      `🔥 Streak: *${profile.current_streak}* zile (record: ${profile.max_streak})\n` +
-      `💪 Antrenamente completate: *${stats.totalWorkouts}*\n` +
-      `🍽️ Mese logate azi: *${todayFoodLogs.length}*\n` +
-      `📈 Dificultate medie: *${stats.avgDifficulty.toFixed(1)}*/5`,
-      { parse_mode: 'Markdown' }
-    );
+    await bot.sendMessage(chatId, message);
   });
 
   // ============================================
@@ -160,14 +154,12 @@ export function initBot() {
   // ============================================
   bot.onText(/\/help/, async (msg) => {
     await bot.sendMessage(msg.chat.id,
-      `*Asistent PowerFit*\n\n` +
-      `💬 *Scrie orice întrebare* — Răspund instant despre antrenament, nutriție, exerciții\n\n` +
-      `📸 *Trimite o poză cu mâncarea* — Analizez caloriile și macro-urile\n\n` +
-      `/status — Vezi progresul tău\n` +
-      `/checkin — Loghează antrenamentul de azi\n` +
-      `/coach — Vorbește direct cu antrenorul\n` +
-      `/help — Această listă de comenzi`,
-      { parse_mode: 'Markdown' }
+      `Asistent PowerFit\n\n` +
+      `Scrie-mi orice întrebare — răspund despre antrenament, nutriție, exerciții.\n\n` +
+      `/status — vezi progresul tău\n` +
+      `/checkin — bifează antrenamentul de azi\n` +
+      `/coach — vorbește direct cu antrenorul\n` +
+      `/help — această listă`
     );
   });
 
@@ -244,7 +236,7 @@ export function initBot() {
     // --- DIFFICULTY RATING ---
     if (data.startsWith('difficulty_')) {
       const rating = parseInt(data.split('_')[1]);
-      const today = getRomaniaDate();
+      const today = new Date().toISOString().split('T')[0];
       
       // Save check-in
       const newDay = (profile.current_day || 0) + 1;
@@ -265,42 +257,29 @@ export function initBot() {
         ...(isCompleted ? { program_completed: true, program_completed_date: new Date().toISOString() } : {})
       });
       
-      // Process points
-      const pointsResult = await processWorkoutCompletion(profile.id);
+      // Tracking intern (gamification invizibilă către user)
+      await processWorkoutCompletion(profile.id);
       
-      // Update streak
+      // Update streak (intern, nu se afișează)
       const updatedProfile = await db.getProfileByTelegramId(query.from.id);
       const newStreak = (updatedProfile.current_streak || 0) + 1;
       const maxStreak = Math.max(newStreak, updatedProfile.max_streak || 0);
       await db.updateProfile(profile.id, { current_streak: newStreak, max_streak: maxStreak });
       
-      // Build response
-      let response = `✅ *Antrenament Ziua ${newDay} completat!*\n\n`;
-      response += `Dificultate: ${'⭐'.repeat(rating)}${'☆'.repeat(5 - rating)}\n`;
-      response += `+${POINTS.WORKOUT_COMPLETE} puncte\n`;
-      
-      // Check for level up
-      if (pointsResult?.leveledUp) {
-        response += `\n${formatLevelUpMessage(pointsResult.previousLevel, pointsResult.newLevel, pointsResult.newTotal)}\n`;
-      }
-      
-      // Streak message
-      const streakMsg = formatStreakMessage(newStreak);
-      if (streakMsg) {
-        response += `\n${streakMsg}\n`;
-        // Process streak bonus points
+      // Procesăm bonus streak intern (fără afișare)
+      if (newStreak === 3 || newStreak === 7 || newStreak === 14) {
         await processStreakBonus(profile.id, newStreak);
       }
       
-      response += `\n${formatPointsSummary({ ...updatedProfile, current_streak: newStreak, total_points: pointsResult?.newTotal || updatedProfile.total_points, current_level: pointsResult?.newLevel || updatedProfile.current_level })}`;
+      // Build response — coach uman, fără gamification
+      let response = `Ziua ${newDay} bifată. Bun lucru.`;
       
-      // Program completed!
       if (isCompleted) {
-        response += `\n\n🎉🎉🎉\n*FELICITĂRI! Ai terminat PowerFit!*\nÎn curând primești raportul complet al transformării tale.`;
+        response = `Ziua 14 bifată — programul PowerFit s-a încheiat oficial.\n\nFelicitări că ai dus 14 zile la capăt. În curând primești raportul complet al transformării tale.`;
       }
       
       // Ask about pain zones
-      await bot.sendMessage(chatId, response, { parse_mode: 'Markdown' });
+      await bot.sendMessage(chatId, response);
       
       // Follow-up: pain check
       setTimeout(async () => {
@@ -330,7 +309,7 @@ export function initBot() {
     // --- PAIN ZONES ---
     if (data.startsWith('pain_')) {
       const zone = data.replace('pain_', '');
-      const today = getRomaniaDate();
+      const today = new Date().toISOString().split('T')[0];
       
       if (zone === 'none') {
         await bot.sendMessage(chatId, 'Excelent! Corp sănătos, progres constant. 💪');
@@ -352,7 +331,7 @@ export function initBot() {
     
     // --- MORNING CHECK-IN RESPONSES ---
     if (data === 'morning_ready') {
-      const dayInfo = getDayInfo(profile.current_day + 1, profile.equipment);
+      const dayInfo = getDayInfo(profile.current_day + 1);
       await bot.sendMessage(chatId,
         `💪 Hai să facem treabă!\n\n📋 *Ziua ${profile.current_day + 1}:* ${dayInfo}\n\n🔗 Deschide lecția în PowerFit și urmează instrucțiunile.\n\nDupă antrenament, scrie /checkin sau apasă butonul de mai jos:`,
         { 
@@ -369,69 +348,80 @@ export function initBot() {
     if (data === 'morning_question') {
       await bot.sendMessage(chatId, 'Scrie-mi întrebarea ta și răspund imediat! 💬');
     }
-    
-    // --- FILOZOFIA C: Recuperare sau Sari la zi ---
-    if (data === 'morning_recover') {
-      const recoveryDay = (profile.current_day || 0) + 1;
-      const dayInfo = getDayInfo(recoveryDay, profile.equipment);
-      const isRest = recoveryDay === 7 || recoveryDay === 14;
-      
-      let msg = '💪 Bine, recuperăm!\n\n' +
-        `📋 *Ziua ${recoveryDay}:* ${dayInfo}\n\n`;
-      
-      if (isRest) {
-        msg += 'Azi e zi de odihnă. Respectă planul alimentar. Mâine continuăm.';
-      } else {
-        msg += 'Deschide lecția Ziua ' + recoveryDay + ' în PowerFit și urmează instrucțiunile. După antrenament, apasă butonul.';
-      }
-      
-      await bot.sendMessage(chatId, msg,
-        { 
-          parse_mode: 'Markdown',
-          reply_markup: isRest ? undefined : {
-            inline_keyboard: [[
-              { text: '✅ Am terminat antrenamentul', callback_data: 'workout_yes' }
-            ]]
-          }
-        }
-      );
-    }
-    
-    if (data === 'morning_skip_ahead') {
-      const calendarDay = getCalendarProgramDay(profile.program_start_date);
-      const dayInfo = getDayInfo(calendarDay, profile.equipment);
-      const isRest = calendarDay === 7 || calendarDay === 14;
-      
-      // Când sare, marchez zilele intermediare ca "skip" prin update current_day la calendarDay - 1
-      // (current_day reprezintă ultimul antrenament bifat; dacă sare la Ziua 5, avem nevoie să sară peste 3 și 4)
-      // Pentru acum, lăsăm current_day neschimbat și-l punem să facă direct ziua calendaristică.
-      // La /checkin urmează logica veche (current_day + 1) — va fi nevoie de ajustare suplimentară dacă sare multe zile.
-      
-      let msg = '⏩ Bine, sărim la zi!\n\n' +
-        `📋 *Ziua ${calendarDay}:* ${dayInfo}\n\n`;
-      
-      if (isRest) {
-        msg += 'Azi e zi de odihnă. Respectă planul alimentar. Mâine continuăm.';
-      } else {
-        msg += 'Deschide lecția Ziua ' + calendarDay + ' în PowerFit și urmează instrucțiunile. După antrenament, apasă butonul.';
-      }
-      
-      msg += '\n\n_Notă: zilele ' + ((profile.current_day || 0) + 1) + '-' + (calendarDay - 1) + ' rămân nebifate. Le poți face mai târziu dacă vrei, sau le lași așa._';
-      
-      await bot.sendMessage(chatId, msg,
-        { 
-          parse_mode: 'Markdown',
-          reply_markup: isRest ? undefined : {
-            inline_keyboard: [[
-              { text: '✅ Am terminat antrenamentul', callback_data: 'workout_yes' }
-            ]]
-          }
-        }
-      );
-    }
   });
 
-  
+  // ============================================
+  // PHOTO MESSAGE — Food Log
+  // ============================================
+  // DISABLED: Food photo analysis
+  /* bot.on('photo_disabled', async (msg) => {
+    const chatId = msg.chat.id;
+    const profile = await db.getProfileByTelegramId(msg.from.id);
+    
+    if (!profile) {
+      await bot.sendMessage(chatId, 'Trebuie să te conectezi mai întâi. Scrie /start');
+      return;
+    }
+    
+    await bot.sendMessage(chatId, '🔍 Analizez masa ta...');
+    
+    try {
+      // Get photo file
+      const photo = msg.photo[msg.photo.length - 1]; // Highest resolution
+      const file = await bot.getFile(photo.file_id);
+      const fileUrl = `https://api.telegram.org/file/bot${process.env.TELEGRAM_BOT_TOKEN}/${file.file_path}`;
+      
+      // Download and convert to base64
+      const base64 = await downloadAsBase64(fileUrl);
+      
+      // Analyze with Claude Vision
+      const analysis = await ai.analyzeFoodPhoto(base64, profile);
+      
+      if (analysis) {
+        // Save to food log
+        const today = new Date().toISOString().split('T')[0];
+        await db.saveFoodLog({
+          user_id: profile.id,
+          log_date: today,
+          meal_type: 'other',
+          description: analysis.description,
+          estimated_calories: analysis.calories,
+          protein_g: analysis.protein,
+          fat_g: analysis.fat,
+          carbs_g: analysis.carbs,
+          ai_feedback: analysis.feedback,
+          photo_file_id: photo.file_id
+        });
+        
+        // Add points for food logging
+        const pointsResult = await db.addPoints(profile.id, POINTS.FOOD_LOG_PHOTO, 'food_log');
+        
+        // Get today's totals
+        const todayLogs = await db.getTodayFoodLogs(profile.id);
+        const totalCals = todayLogs.reduce((sum, l) => sum + (l.estimated_calories || 0), 0);
+        const totalProtein = todayLogs.reduce((sum, l) => sum + (l.protein_g || 0), 0);
+        const target = profile.daily_calorie_target || 2000;
+        
+        await bot.sendMessage(chatId,
+          `🍽️ *${analysis.description}*\n\n` +
+          `🔸 Calorii: *${analysis.calories}* kcal\n` +
+          `🔸 Proteine: *${analysis.protein}*g\n` +
+          `🔸 Grăsimi: *${analysis.fat}*g\n` +
+          `🔸 Carbohidrați: *${analysis.carbs}*g\n\n` +
+          `${analysis.feedback}\n\n` +
+          `📊 *Total azi:* ${totalCals}/${target} kcal | ${totalProtein.toFixed(0)}g proteine\n` +
+          `🍽️ Mese logate: ${todayLogs.length}\n` +
+          `+${POINTS.FOOD_LOG_PHOTO} puncte`,
+          { parse_mode: 'Markdown' }
+        );
+      } else {
+        await bot.sendMessage(chatId, 'Nu am reușit să analizez poza. Încearcă cu o poză mai clară, de sus, cu toată masa vizibilă. 📸');
+      }
+    } catch (error) {
+      console.error('Photo processing error:', error);
+      await bot.sendMessage(chatId, 'A apărut o eroare la procesarea pozei. Încearcă din nou.');
+    }
+  }); */
 
   // ============================================
   // TEXT MESSAGE — Asistentul PowerFit Chat
@@ -466,18 +456,9 @@ export function initBot() {
       
       // Send typing indicator
       await bot.sendChatAction(chatId, 'typing');
-
-      // Citim checkin-ul de azi (dacă există) — botul trebuie să știe dacă a antrenat deja
-      let todayWorkout = null;
-      try {
-        const today = getRomaniaDate();
-        const recentCheckins = await db.getRecentCheckins(profile.id, 5);
-        todayWorkout = recentCheckins.find(c => c.checkin_date === today && c.checkin_type === 'workout') || null;
-      } catch (e) {
-        console.error('Today workout fetch error:', e.message);
-      }
+      
       // Get AI response
-      const response = await ai.getChatResponse(msg.text, history, profile, todayWorkout);
+      const response = await ai.getChatResponse(msg.text, history, profile);
       
       // Save AI response
       await db.saveMessage(profile.id, 'assistant', response);
@@ -497,88 +478,48 @@ export function initBot() {
 // SEND FUNCTIONS (used by cron jobs)
 // ============================================
 
-
-
 export async function sendMorningCheckin(profile) {
   if (!bot || !profile.telegram_chat_id) return;
   
-  // Calculez contextul real al zilei (Filozofia C)
-  const calendarDay = getCalendarProgramDay(profile.program_start_date);
-  const bifate = profile.current_day || 0;
-  const nextLogicDay = bifate + 1; // ce zi ar trebui să facă dacă recuperează
+  const dayNumber = (profile.current_day || 0) + 1;
+  if (dayNumber > 14) return;
   
-  // Dacă programul nu a început încă, nu trimite morning checkin (pre-program logic e separat)
-  if (calendarDay === null || calendarDay <= 0) return;
-  
-  // Dacă programul calendaristic s-a încheiat și toate zilele sunt bifate, nu mai trimite
-  if (calendarDay > 14 && bifate >= 14) return;
-  
-  // Dacă a depășit fereastra de 21 de zile, nu mai trimite morning check-in
-  if (calendarDay > 21) return;
-  
-  const offset = calendarDay <= 14 ? (calendarDay - bifate) : null;
-  const isLate = offset !== null && offset > 0;
+  const dayInfo = getDayInfo(dayNumber);
+  const isRestDay = dayNumber === 7 || dayNumber === 14;
+  const isCardioDay = dayNumber === 4 || dayNumber === 11;
   
   let message = '';
-  let keyboard = [];
   
-  if (isLate) {
-    // SCENARIUL "ÎN URMĂ" — varianta A cu butoane de alegere (Filozofia C)
-    const recoveryDayInfo = getDayInfo(nextLogicDay, profile.equipment);
-    const calendarDayInfo = getDayInfo(calendarDay, profile.equipment);
-    const isRecoveryRest = nextLogicDay === 7 || nextLogicDay === 14;
-    const isCalendarRest = calendarDay === 7 || calendarDay === 14;
-    
-    message = 'Bună dimineața, ' + profile.full_name + '!\n\n' +
-      'Azi e Ziua ' + calendarDay + ' calendaristic, dar ai bifate ' + bifate + ' antrenamente. Ești cu ' + offset + (offset === 1 ? ' zi' : ' zile') + ' în urmă față de program.\n\n' +
-      'Ai două opțiuni:\n\n' +
-      '🔄 Recuperezi — faci Ziua ' + nextLogicDay + (isRecoveryRest ? ' (odihnă)' : ': ' + recoveryDayInfo) + '\n' +
-      '⏩ Sari la zi — faci direct Ziua ' + calendarDay + (isCalendarRest ? ' (odihnă)' : ': ' + calendarDayInfo) + '\n\n' +
-      'Alege mai jos sau scrie-mi dacă ai întrebări.';
-    
-    keyboard = [
-      [{ text: '🔄 Recuperez Ziua ' + nextLogicDay, callback_data: 'morning_recover' }],
-      [{ text: '⏩ Sar la Ziua ' + calendarDay, callback_data: 'morning_skip_ahead' }]
-    ];
+  if (isRestDay) {
+    message = 'Buna dimineata, ' + profile.full_name + '!\n\n' +
+      'Ziua ' + dayNumber + '/14 — Zi de odihnă.\n\n' +
+      'Corpul tău se recuperează și crește azi. Respectă planul alimentar și odihnește-te. Mâine revenim la treabă.';
+  } else if (isCardioDay) {
+    message = 'Buna dimineata, ' + profile.full_name + '!\n\n' +
+      'Ziua ' + dayNumber + '/14 — ' + dayInfo + '\n\n' +
+      'Dacă simți oboseala acumulată după primele zile, ia o pauză completă azi. Programul se decalează cu o zi. Dacă te simți bine, hai la cardio!';
   } else {
-    // SCENARIUL "LA ZI" — logica veche, curățată cu diacritice
-    const dayNumber = calendarDay;
-    const dayInfo = getDayInfo(dayNumber, profile.equipment);
-    const isRestDay = dayNumber === 7 || dayNumber === 14;
-    const isCardioDay = dayNumber === 4 || dayNumber === 11;
-    
-    if (isRestDay) {
-      message = 'Bună dimineața, ' + profile.full_name + '!\n\n' +
-        'Ziua ' + dayNumber + '/14 — Zi de odihnă.\n\n' +
-        'Corpul tău se recuperează și crește azi. Respectă planul alimentar și odihnește-te. Mâine revenim la treabă.';
-    } else if (isCardioDay) {
-      message = 'Bună dimineața, ' + profile.full_name + '!\n\n' +
-        'Ziua ' + dayNumber + '/14 — ' + dayInfo + '\n\n' +
-        'Dacă simți oboseala acumulată după primele zile, ia o pauză completă azi. Programul se decalează cu o zi. Dacă te simți bine, hai la cardio!';
-    } else {
-      message = 'Bună dimineața, ' + profile.full_name + '!\n\n' +
-        'Ziua ' + dayNumber + '/14 — ' + dayInfo + '\n\n' +
-        'Deschide lecția în PowerFit și urmează instrucțiunile. După antrenament, apasă butonul de mai jos.';
-    }
-    
-    keyboard = isRestDay ? [] : [[
-      { text: 'Am terminat antrenamentul', callback_data: 'workout_yes' }
-    ]];
+    message = 'Buna dimineata, ' + profile.full_name + '!\n\n' +
+      'Ziua ' + dayNumber + '/14 — ' + dayInfo + '\n\n' +
+      'Deschide lecția în PowerFit și urmează instrucțiunile. După antrenament, apasă butonul de mai jos.';
   }
+  
+  const keyboard = isRestDay ? [] : [[
+    { text: 'Am terminat antrenamentul', callback_data: 'workout_yes' }
+  ]];
   
   await bot.sendMessage(profile.telegram_chat_id, message, 
     keyboard.length > 0 ? { reply_markup: { inline_keyboard: keyboard } } : {}
   );
   
-  const logSuffix = isLate ? ' (LATE, calendar=' + calendarDay + ', bifate=' + bifate + ')' : ' (on track)';
-  await db.logNotification(profile.id, 'morning_checkin', 'telegram', 'Calendar day ' + calendarDay + ' morning checkin' + logSuffix);
+  await db.logNotification(profile.id, 'morning_checkin', 'telegram', 'Day ' + dayNumber + ' morning checkin');
 }
 
 export async function sendEveningCheckin(profile) {
   if (!bot || !profile.telegram_chat_id) return;
   
   // Check if already checked in today
-  const today = getRomaniaDate();
+  const today = new Date().toISOString().split('T')[0];
   const { data: todayCheckin } = await db.supabase
     .from('daily_checkins')
     .select('id')
@@ -648,13 +589,12 @@ export async function sendPostProgramMessage(profile, daysSinceCompletion) {
   switch(daysSinceCompletion) {
     case 1:
       const stats = await db.getCheckinStats(profile.id);
-      message = `🎉 *Raportul tău PowerFit*\n\n` +
-        `📅 Program: 14 zile\n` +
-        `💪 Antrenamente completate: *${stats.totalWorkouts}*\n` +
-        `🔥 Streak maxim: *${profile.max_streak}* zile\n` +
-        `${formatPointsSummary(profile)}\n` +
-        `📈 Dificultate medie: *${stats.avgDifficulty.toFixed(1)}*/5\n\n` +
-        `Ai demonstrat că poți. Asta nu e un final — e un început. 💪`;
+      const avgD = stats.avgDifficulty ? stats.avgDifficulty.toFixed(1) : '—';
+      message = `Raportul tău PowerFit\n\n` +
+        `Program: 14 zile\n` +
+        `Antrenamente completate: ${stats.totalWorkouts}\n` +
+        `Dificultate medie: ${avgD}/5\n\n` +
+        `Ai demonstrat că poți. Asta nu e un final — e un început.`;
       break;
     case 3:
       message = `Hei ${profile.full_name}! 💬\n\n` +
@@ -691,43 +631,23 @@ export async function sendPostProgramMessage(profile, daysSinceCompletion) {
 // HELPER FUNCTIONS
 // ============================================
 
-function getDayInfo(dayNumber, equipment) {
-  // Programe ușor diferite între sală și aer liber (bazate pe cursul PowerFit)
-  const scheduleGym = {
-    1: 'Picioare, Piept și Abdomen',
-    2: 'Spate, Umeri, Abdomen și Lombari',
-    3: 'Brațe, Picioare și Gambe',
-    4: 'Cardio HIIT (sau zi de pauză dacă ești obosit)',
-    5: 'Exerciții fundamentale + Grup muscular deficitar',
-    6: 'Volum total (Tracțiuni 50 + Dips 80 + Squat 100)',
-    7: 'Zi de odihnă',
-    8: 'Picioare (bază), Brațe, Abdomen',
+function getDayInfo(dayNumber) {
+  const schedule = {
+    1: 'Picioare, Piept si Abdomen',
+    2: 'Spate, Umeri, Abdomen si Lombari',
+    3: 'Brate, Picioare si Gambe',
+    4: 'Cardio HIIT (sau zi de pauza daca esti obosit)',
+    5: 'Exercitii fundamentale + Grup muscular deficitar',
+    6: 'Volum total (Tractiuni 50 + Dips 80 + Squat 100)',
+    7: 'Zi de odihna',
+    8: 'Picioare (baza), Brate, Abdomen',
     9: 'Spate, Piept',
-    10: 'Umeri, Picioare, Gambe și Abdomen',
+    10: 'Umeri, Picioare, Gambe si Abdomen',
     11: 'Cardio intervale',
-    12: 'Exerciții fundamentale + Grup muscular deficitar',
-    13: 'Volum total (Tracțiuni 60 + Dips 80 + Squat 100)',
-    14: 'Zi de odihnă — PROGRAMUL S-A ÎNCHEIAT!',
+    12: 'Exercitii fundamentale + Grup muscular deficitar',
+    13: 'Volum total (Tractiuni 60 + Dips 80 + Squat 100)',
+    14: 'Zi de odihna - PROGRAMUL S-A INCHEIAT!',
   };
-  
-  const scheduleOutdoor = {
-    1: 'Picioare, Piept și Abdomen',
-    2: 'Spate, Umeri, Abdomen și Lombari',
-    3: 'Brațe, Picioare și Gambe',
-    4: 'Cardio HIIT (sau zi de pauză dacă ești obosit)',
-    5: 'Circuit Total Body (6 exerciții × 6 runde)',
-    6: 'Volum total (Tracțiuni 50 + Dips 80 + Sumo Squat 100)',
-    7: 'Zi de odihnă',
-    8: 'Picioare (bază), Brațe, Abdomen',
-    9: 'Spate, Piept',
-    10: 'Umeri, Picioare, Gambe și Abdomen',
-    11: 'Cardio intervale',
-    12: 'Exerciții fundamentale + Grup muscular deficitar',
-    13: 'Volum total (Tracțiuni 60 + Dips 80 + Step-up, Plank, Fandări)',
-    14: 'Zi de odihnă — PROGRAMUL S-A ÎNCHEIAT!',
-  };
-  
-  const schedule = equipment === 'outdoor' ? scheduleOutdoor : scheduleGym;
   return schedule[dayNumber] || 'Antrenament';
 }
 
@@ -752,31 +672,31 @@ export async function sendPreProgramMessage(profile, startDate) {
   let message = '';
   
   if (daysUntilStart > 5) {
-    message = 'Bună dimineața, ' + profile.full_name + '! \u{1F4AA}\n\nProgramul tău de antrenament începe luni. Până atunci, ai câteva lucruri importante de parcurs:\n\n' +
+    message = 'Buna dimineata, ' + profile.full_name + '! \u{1F4AA}\n\nProgramul tău de antrenament începe luni. Până atunci, ai câteva lucruri importante de parcurs:\n\n' +
       '\u{1F4DA} Parcurge secțiunea "Informatii utile" - acolo găsești strategia completă de alimentație\n' +
       '\u{1F9EE} Calculează-ți macronutrienții — folosește calculatorul din curs sau scrie-mi aici sexul, greutatea și procentul de grăsime\n' +
       '\u{1F4F1} Descarcă o aplicație de tracking nutrițional\n\nAcești pași sunt esențiali înainte de prima zi de antrenament.';
   } else if (daysUntilStart > 3) {
-    message = 'Bună dimineața, ' + profile.full_name + '! \u{1F4AA}\n\n' +
+    message = 'Buna dimineata, ' + profile.full_name + '! \u{1F4AA}\n\n' +
       'Mai sunt ' + daysUntilStart + ' zile până la startul programului.\n\n' +
       'Ai calculat macronutrienții? Dacă nu, scrie-mi aici datele tale și te ajut instant.\n' +
       'Fă antrenamentul pregătitor azi — te va ajuta să intri în ritm luni.\n' +
       'Verifică lista de cumpărături din secțiunea Alimentație.';
   } else if (daysUntilStart >= 2) {
-    message = 'Bună dimineața, ' + profile.full_name + '! \u{1F4AA}\n\n' +
+    message = 'Buna dimineata, ' + profile.full_name + '! \u{1F4AA}\n\n' +
       'Mai sunt ' + daysUntilStart + ' zile! Fă antrenamentul pregătitor dacă nu l-ai făcut încă.\n\n' +
       'Verifică că ai totul pregătit:\n' +
       '- Macronutrienții calculați\n' +
       '- Ingredientele cumpărate\n' +
       '- Aplicația de tracking instalată\n\nLuni începem la intensitate maximă!';
   } else if (daysUntilStart === 1) {
-    message = 'Bună dimineața, ' + profile.full_name + '! \u{1F525}\n\n' +
+    message = 'Buna dimineata, ' + profile.full_name + '! \u{1F525}\n\n' +
       'Mâine începe programul! Ziua 1: antrenament complet + plan alimentar.\n\n' +
       'Diseară se deblochează Săptămâna 1.\n' +
       'Mâine dimineață la 8:00 primești primul reminder cu antrenamentul zilei.\n\n' +
       'Ești pregătit? \u{1F4AA}';
   } else {
-    message = 'Bună dimineața, ' + profile.full_name + '! \u{1F525}\n\n' +
+    message = 'Buna dimineata, ' + profile.full_name + '! \u{1F525}\n\n' +
       'Programul tău începe luni. Parcurge materialele din curs și pregătește-te!\n\n' +
       'Scrie-mi dacă ai întrebări.';
   }
