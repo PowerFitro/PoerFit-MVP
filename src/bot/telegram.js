@@ -2,6 +2,7 @@ import TelegramBot from 'node-telegram-bot-api';
 import * as db from '../db/supabase.js';
 import * as ai from '../services/ai.js';
 import { processWorkoutCompletion, processStreakBonus } from '../services/gamification.js';
+import { getCalendarProgramDay, getRomaniaDate } from '../utils/helpers.js';
 import https from 'https';
 
 let bot;
@@ -236,10 +237,17 @@ export function initBot() {
     // --- DIFFICULTY RATING ---
     if (data.startsWith('difficulty_')) {
       const rating = parseInt(data.split('_')[1]);
-      const today = new Date().toISOString().split('T')[0];
+      const today = getRomaniaDate();
       
-      // Save check-in
-      const newDay = (profile.current_day || 0) + 1;
+      // Calculez ziua calendaristică reală (sursa de adevăr — nu current_day + 1)
+      const calendarDay = getCalendarProgramDay(profile.program_start_date);
+      const programDay = (calendarDay !== null && calendarDay >= 1 && calendarDay <= 14) ? calendarDay : (profile.current_day || 0) + 1;
+      
+      // current_day reprezintă progresul userului (numărul de zile bifate)
+      // Avansează la programDay (ziua calendaristică actuală) după bifare
+      const newDay = Math.max((profile.current_day || 0) + 1, programDay);
+      
+      // Save check-in cu ziua calendaristică reală
       await db.saveCheckin({
         user_id: profile.id,
         checkin_type: 'workout',
@@ -247,11 +255,11 @@ export function initBot() {
         workout_completed: true,
         difficulty_rating: rating,
         energy_level: rating <= 2 ? 'high' : rating <= 3 ? 'ok' : 'low',
-        program_day: newDay
+        program_day: programDay
       });
       
-      // Update profile day
-      const isCompleted = newDay >= 14;
+      // Update profile day — programul s-a încheiat dacă ziua calendaristică >= 14
+      const isCompleted = (calendarDay !== null && calendarDay >= 14) || newDay >= 14;
       await db.updateProfile(profile.id, { 
         current_day: newDay,
         ...(isCompleted ? { program_completed: true, program_completed_date: new Date().toISOString() } : {})
@@ -272,10 +280,10 @@ export function initBot() {
       }
       
       // Build response — coach uman, fără gamification
-      let response = `Ziua ${newDay} bifată. Bun lucru.`;
+      let response = `Ziua ${programDay} bifată. Bun lucru.`;
       
       if (isCompleted) {
-        response = `Ziua 14 bifată — programul PowerFit s-a încheiat oficial.\n\nFelicitări că ai dus 14 zile la capăt. În curând primești raportul complet al transformării tale.`;
+        response = `Ziua ${programDay} bifată — programul PowerFit s-a încheiat oficial.\n\nFelicitări că ai dus 14 zile la capăt. În curând primești raportul complet al transformării tale.`;
       }
       
       // Ask about pain zones
@@ -309,7 +317,7 @@ export function initBot() {
     // --- PAIN ZONES ---
     if (data.startsWith('pain_')) {
       const zone = data.replace('pain_', '');
-      const today = new Date().toISOString().split('T')[0];
+      const today = getRomaniaDate();
       
       if (zone === 'none') {
         await bot.sendMessage(chatId, 'Excelent! Corp sănătos, progres constant. 💪');
@@ -481,29 +489,47 @@ export function initBot() {
 export async function sendMorningCheckin(profile) {
   if (!bot || !profile.telegram_chat_id) return;
   
-  const dayNumber = (profile.current_day || 0) + 1;
-  if (dayNumber > 14) return;
+  // Calculăm ziua calendaristică din program_start_date
+  // Programul are 14 zile fixe — calendar dictează, nu numărul de bifări
+  const calendarDay = getCalendarProgramDay(profile.program_start_date);
   
-  const dayInfo = getDayInfo(dayNumber);
-  const isRestDay = dayNumber === 7 || dayNumber === 14;
-  const isCardioDay = dayNumber === 4 || dayNumber === 11;
+  // Programul nu a început (pre-program) sau s-a terminat fereastra de 14 zile
+  if (calendarDay === null || calendarDay <= 0) return;
+  if (calendarDay > 14) return;
+  
+  const dayInfo = getDayInfo(calendarDay);
+  const isRestDay = calendarDay === 7 || calendarDay === 14;
+  const isCardioDay = calendarDay === 4 || calendarDay === 11;
+  
+  // Pentru zilele de odihnă: avansăm automat current_day ca să nu rămână userul blocat
+  // Asta evită bucla infinită cu Z7/Z14 (Bug B)
+  if (isRestDay && (profile.current_day || 0) < calendarDay) {
+    await db.updateProfile(profile.id, { current_day: calendarDay });
+  }
   
   let message = '';
   
   if (isRestDay) {
-    message = 'Buna dimineata, ' + profile.full_name + '!\n\n' +
-      'Ziua ' + dayNumber + '/14 — Zi de odihnă.\n\n' +
-      'Corpul tău se recuperează și crește azi. Respectă planul alimentar și odihnește-te. Mâine revenim la treabă.';
+    if (calendarDay === 14) {
+      message = 'Bună dimineața, ' + profile.full_name + '!\n\n' +
+        'Ziua 14/14 — Zi de odihnă. Programul PowerFit s-a încheiat oficial.\n\n' +
+        'Felicitări că ai dus 14 zile la capăt. Azi te odihnești complet. În curând primești raportul transformării tale.';
+    } else {
+      message = 'Bună dimineața, ' + profile.full_name + '!\n\n' +
+        'Ziua ' + calendarDay + '/14 — Zi de odihnă.\n\n' +
+        'Corpul tău se recuperează și crește azi. Respectă planul alimentar și odihnește-te. Mâine revenim la treabă.';
+    }
   } else if (isCardioDay) {
-    message = 'Buna dimineata, ' + profile.full_name + '!\n\n' +
-      'Ziua ' + dayNumber + '/14 — ' + dayInfo + '\n\n' +
+    message = 'Bună dimineața, ' + profile.full_name + '!\n\n' +
+      'Ziua ' + calendarDay + '/14 — ' + dayInfo + '\n\n' +
       'Dacă simți oboseala acumulată după primele zile, ia o pauză completă azi. Programul se decalează cu o zi. Dacă te simți bine, hai la cardio!';
   } else {
-    message = 'Buna dimineata, ' + profile.full_name + '!\n\n' +
-      'Ziua ' + dayNumber + '/14 — ' + dayInfo + '\n\n' +
+    message = 'Bună dimineața, ' + profile.full_name + '!\n\n' +
+      'Ziua ' + calendarDay + '/14 — ' + dayInfo + '\n\n' +
       'Deschide lecția în PowerFit și urmează instrucțiunile. După antrenament, apasă butonul de mai jos.';
   }
   
+  // Buton DOAR pentru zilele de antrenament și cardio (NU pentru odihnă)
   const keyboard = isRestDay ? [] : [[
     { text: 'Am terminat antrenamentul', callback_data: 'workout_yes' }
   ]];
@@ -512,14 +538,18 @@ export async function sendMorningCheckin(profile) {
     keyboard.length > 0 ? { reply_markup: { inline_keyboard: keyboard } } : {}
   );
   
-  await db.logNotification(profile.id, 'morning_checkin', 'telegram', 'Day ' + dayNumber + ' morning checkin');
+  await db.logNotification(profile.id, 'morning_checkin', 'telegram', 'Calendar day ' + calendarDay + ' morning checkin');
 }
 
 export async function sendEveningCheckin(profile) {
   if (!bot || !profile.telegram_chat_id) return;
   
+  // Nu trimite evening checkin în zilele de odihnă (Z7, Z14) — n-ai ce să bifezi
+  const calendarDay = getCalendarProgramDay(profile.program_start_date);
+  if (calendarDay === 7 || calendarDay === 14 || calendarDay === null || calendarDay <= 0 || calendarDay > 14) return;
+  
   // Check if already checked in today
-  const today = new Date().toISOString().split('T')[0];
+  const today = getRomaniaDate();
   const { data: todayCheckin } = await db.supabase
     .from('daily_checkins')
     .select('id')
