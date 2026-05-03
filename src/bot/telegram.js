@@ -244,7 +244,7 @@ export function initBot() {
     // --- DIFFICULTY RATING ---
     if (data.startsWith('difficulty_')) {
       const rating = parseInt(data.split('_')[1]);
-      const today = new Date().toISOString().split('T')[0];
+      const today = getRomaniaDate();
       
       // Save check-in
       const newDay = (profile.current_day || 0) + 1;
@@ -330,7 +330,7 @@ export function initBot() {
     // --- PAIN ZONES ---
     if (data.startsWith('pain_')) {
       const zone = data.replace('pain_', '');
-      const today = new Date().toISOString().split('T')[0];
+      const today = getRomaniaDate();
       
       if (zone === 'none') {
         await bot.sendMessage(chatId, 'Excelent! Corp sănătos, progres constant. 💪');
@@ -398,7 +398,7 @@ export function initBot() {
     }
     
     if (data === 'morning_skip_ahead') {
-      const calendarDay = getCalendarProgramDayLocal(profile.program_start_date);
+      const calendarDay = getCalendarProgramDay(profile.program_start_date);
       const dayInfo = getDayInfo(calendarDay, profile.equipment);
       const isRest = calendarDay === 7 || calendarDay === 14;
       
@@ -470,7 +470,7 @@ export function initBot() {
       // Citim checkin-ul de azi (dacă există) — botul trebuie să știe dacă a antrenat deja
       let todayWorkout = null;
       try {
-        const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Bucharest' });
+        const today = getRomaniaDate());
         const recentCheckins = await db.getRecentCheckins(profile.id, 1);
         todayWorkout = recentCheckins.find(c => c.checkin_date === today && c.checkin_type === 'workout') || null;
       } catch (e) {
@@ -497,22 +497,13 @@ export function initBot() {
 // SEND FUNCTIONS (used by cron jobs)
 // ============================================
 
-// Helper: calculează ziua calendaristică în program (1-14) pe baza program_start_date
-function getCalendarProgramDayLocal(programStartDate) {
-  if (!programStartDate) return null;
-  const start = new Date(programStartDate + 'T00:00:00');
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  start.setHours(0, 0, 0, 0);
-  const diffDays = Math.floor((today - start) / (1000 * 60 * 60 * 24));
-  return diffDays + 1;
-}
+
 
 export async function sendMorningCheckin(profile) {
   if (!bot || !profile.telegram_chat_id) return;
   
   // Calculez contextul real al zilei (Filozofia C)
-  const calendarDay = getCalendarProgramDayLocal(profile.program_start_date);
+  const calendarDay = getCalendarProgramDay(profile.program_start_date);
   const bifate = profile.current_day || 0;
   const nextLogicDay = bifate + 1; // ce zi ar trebui să facă dacă recuperează
   
@@ -587,7 +578,7 @@ export async function sendEveningCheckin(profile) {
   if (!bot || !profile.telegram_chat_id) return;
   
   // Check if already checked in today
-  const today = new Date().toISOString().split('T')[0];
+  const today = getRomaniaDate();
   const { data: todayCheckin } = await db.supabase
     .from('daily_checkins')
     .select('id')
