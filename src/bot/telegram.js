@@ -471,7 +471,7 @@ export function initBot() {
       let todayWorkout = null;
       try {
         const today = getRomaniaDate();
-        const recentCheckins = await db.getRecentCheckins(profile.id, 1);
+        const recentCheckins = await db.getRecentCheckins(profile.id, 5);
         todayWorkout = recentCheckins.find(c => c.checkin_date === today && c.checkin_type === 'workout') || null;
       } catch (e) {
         console.error('Today workout fetch error:', e.message);
