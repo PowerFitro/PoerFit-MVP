@@ -470,7 +470,7 @@ export function initBot() {
       // Citim checkin-ul de azi (dacă există) — botul trebuie să știe dacă a antrenat deja
       let todayWorkout = null;
       try {
-        const today = getRomaniaDate());
+        const today = getRomaniaDate();
         const recentCheckins = await db.getRecentCheckins(profile.id, 1);
         todayWorkout = recentCheckins.find(c => c.checkin_date === today && c.checkin_type === 'workout') || null;
       } catch (e) {
