@@ -305,11 +305,12 @@ export function initBot() {
         program_day: programDay
       });
       
-      // Update profile day — programul s-a încheiat dacă ziua calendaristică >= 14
-      const isCompleted = (calendarDay !== null && calendarDay >= 14) || newDay >= 14;
+      // Update profile day — programul s-a încheiat dacă userul a bifat 14 antrenamente reale
+      // (NU mai marcăm program_completed pe baza calendarDay aici — cron-ul auto-mark face asta separat)
+      const userFinishedAllWorkouts = newDay >= 14;
       await db.updateProfile(profile.id, { 
         current_day: newDay,
-        ...(isCompleted ? { program_completed: true, program_completed_date: new Date().toISOString() } : {})
+        ...(userFinishedAllWorkouts ? { program_completed: true, program_completed_date: new Date().toISOString() } : {})
       });
       
       // Tracking intern (gamification invizibilă către user)
@@ -327,10 +328,22 @@ export function initBot() {
       }
       
       // Build response — coach uman, fără gamification
-      let response = `Ziua ${programDay} bifată. Bun lucru.`;
+      // 3 cazuri distincte:
+      // A) User a bifat toate 14 antrenamente → felicitare finală
+      // B) Calendar a trecut Z14, user încă recuperează → mesaj recuperare
+      // C) În program normal → mesaj standard
+      let response;
       
-      if (isCompleted) {
-        response = `Ziua ${programDay} bifată — programul PowerFit s-a încheiat oficial.\n\nFelicitări că ai dus 14 zile la capăt. În curând primești raportul complet al transformării tale.`;
+      if (userFinishedAllWorkouts) {
+        // Cazul A — terminat real
+        response = `Ziua 14 bifată — programul PowerFit s-a încheiat oficial.\n\nFelicitări că ai dus 14 zile la capăt. În curând primești raportul complet al transformării tale.`;
+      } else if (calendarDay !== null && calendarDay > 14) {
+        // Cazul B — recuperare după ce calendarul a trecut
+        const daysOverdue = calendarDay - 14;
+        response = `Ziua ${programDay} bifată. Programul calendar s-a încheiat acum ${daysOverdue} ${daysOverdue === 1 ? 'zi' : 'zile'}, dar continui să recuperezi. Bun lucru.`;
+      } else {
+        // Cazul C — în program normal
+        response = `Ziua ${programDay} bifată. Bun lucru.`;
       }
       
       // Ask about pain zones
