@@ -176,6 +176,15 @@ export function initBot() {
       return;
     }
     
+    // Anti-cheat: verifică dacă a bifat deja azi
+    const existingCheckin = await db.getTodayWorkoutCheckin(profile.id);
+    if (existingCheckin) {
+      await bot.sendMessage(chatId,
+        'Ai bifat deja antrenamentul de azi. Mâine continuăm.'
+      );
+      return;
+    }
+    
     await bot.sendMessage(chatId, 
       `Ai terminat antrenamentul de azi? 💪`,
       {
@@ -208,6 +217,15 @@ export function initBot() {
     
     // --- WORKOUT COMPLETED ---
     if (data === 'workout_yes') {
+      // Anti-cheat: verifică dacă a bifat deja azi (între /checkin și butonul Da)
+      const existingCheckin = await db.getTodayWorkoutCheckin(profile.id);
+      if (existingCheckin) {
+        await bot.sendMessage(chatId,
+          'Ai bifat deja antrenamentul de azi. Mâine continuăm.'
+        );
+        return;
+      }
+      
       await bot.sendMessage(chatId,
         'Cum a fost antrenamentul?',
         {
@@ -236,6 +254,35 @@ export function initBot() {
     
     // --- DIFFICULTY RATING ---
     if (data.startsWith('difficulty_')) {
+      // ANTI-CHEAT: 3 verificări înainte de a incrementa
+      
+      // 1) Există deja un workout bifat azi? → block
+      const existingCheckin = await db.getTodayWorkoutCheckin(profile.id);
+      if (existingCheckin) {
+        await bot.sendMessage(chatId,
+          'Ai bifat deja antrenamentul de azi. Mâine continuăm.'
+        );
+        return;
+      }
+      
+      // 2) A fost trimis morning checkin azi? Dacă nu, lasă să bifeze (poate folosi /checkin manual înainte de morning)
+      // 3) Dacă a fost morning checkin trimis, verifică să fi trecut minim 20 minute (timp minim antrenament)
+      const lastMorningTime = await db.getLastNotificationTime(profile.id, 'morning_checkin');
+      if (lastMorningTime) {
+        const today = getRomaniaDate();
+        const lastDate = new Date(lastMorningTime).toISOString().split('T')[0];
+        // Doar dacă morning checkin a fost trimis AZI verificăm timpul minim
+        if (lastDate === today) {
+          const minutesSinceMorning = Math.floor((Date.now() - new Date(lastMorningTime).getTime()) / 60000);
+          if (minutesSinceMorning < 20) {
+            await bot.sendMessage(chatId,
+              `Antrenamentul corect durează minim 20 minute. Ai primit reminder-ul acum ${minutesSinceMorning} ${minutesSinceMorning === 1 ? 'minut' : 'minute'}.\n\nDă-i timpul cuvenit corpului — apoi bifează.`
+            );
+            return;
+          }
+        }
+      }
+      
       const rating = parseInt(data.split('_')[1]);
       const today = getRomaniaDate();
       
