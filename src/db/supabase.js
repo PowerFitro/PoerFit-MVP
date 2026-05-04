@@ -113,6 +113,23 @@ export async function getLastCheckin(userId, type = 'workout') {
   return data;
 }
 
+// Verifică dacă există deja un workout bifat azi pentru user.
+// Folosit la anti-cheat (Bug E) — previne incrementare multiplă.
+export async function getTodayWorkoutCheckin(userId) {
+  const today = getRomaniaDate();
+  const { data, error } = await supabase
+    .from('daily_checkins')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('checkin_type', 'workout')
+    .eq('checkin_date', today)
+    .eq('workout_completed', true)
+    .limit(1)
+    .single();
+  if (error && error.code !== 'PGRST116') throw error;
+  return data;
+}
+
 export async function getCheckinStats(userId) {
   const { data, error } = await supabase
     .from('daily_checkins')
@@ -241,6 +258,21 @@ export async function wasNotificationSentToday(userId, type) {
     .limit(1);
   if (error) return false;
   return data && data.length > 0;
+}
+
+// Returnează timestamp-ul ultimei notificări trimise userului de un anumit tip.
+// Folosit la anti-cheat (Bug E) — verifică timpul scurs de la morning checkin la bifare.
+export async function getLastNotificationTime(userId, type) {
+  const { data, error } = await supabase
+    .from('notifications_log')
+    .select('created_at')
+    .eq('user_id', userId)
+    .eq('notification_type', type)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .single();
+  if (error && error.code !== 'PGRST116') return null;
+  return data ? data.created_at : null;
 }
 
 // ============================================
