@@ -331,39 +331,13 @@ REGULĂ STRICTĂ: când vorbești despre "ziua de azi" sau o zi specifică din c
 // ============================================
 // AI WEEKLY REVIEW
 // ============================================
+// DEZACTIVAT pentru MVP — prompt-ul producea halucinații (sfaturi inventate,
+// promisiuni de funcții inexistente — "loghează mese", "X mese logate").
+// Pentru primii 10 clienți, Sam trimite mesaj manual personalizat duminică seara.
+// Reactivat după validare MVP cu prompt strict, doar fapte fără sfaturi.
 
 export async function generateWeeklyReview(profile, stats) {
-  try {
-    const response = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 400,
-      system: 'Ești Asistentul PowerFit, instruit de Sam. Generează un review săptămânal concis în română. Fii direct, specific, și motivant. Maxim 200 cuvinte. Nu menționa puncte, nivel, gamification — doar progres concret și obiective.',
-      messages: [{
-        role: 'user',
-        content: `Generează review-ul săptămânal pentru:
-Nume: ${profile.full_name}
-Săptămâna: ${stats.weekNumber}
-Antrenamente completate: ${stats.workoutsCompleted}/7
-Dificultate medie: ${stats.avgDifficulty}/5
-Mese logate: ${stats.mealsLogged}
-Obiectiv: ${profile.goal}
-Zone de durere raportate: ${stats.painZones?.join(', ') || 'niciuna'}
-Energie medie: ${stats.avgEnergy || 'nelogată'}
-
-Structura review-ului:
-📊 REVIEW SĂPTĂMÂNA ${stats.weekNumber}
-[Rezumat date]
-✅ Ce a mers bine: [specific]
-⚠️ Ce poți îmbunătăți: [specific]  
-🎯 Obiectiv săptămâna viitoare: [1 obiectiv concret]
-💬 [Mesaj personal scurt]`
-      }]
-    });
-    return response.content[0].text;
-  } catch (error) {
-    console.error('Weekly review error:', error);
-    return null;
-  }
+  return null;
 }
 
 // ============================================
