@@ -266,7 +266,7 @@ export function initBot() {
       }
       
       // 2) A fost trimis morning checkin azi? Dacă nu, lasă să bifeze (poate folosi /checkin manual înainte de morning)
-      // 3) Dacă a fost morning checkin trimis, verifică să fi trecut minim 20 minute (timp minim antrenament)
+      // 3) Dacă a fost morning checkin trimis, verifică să fi trecut minim 30 minute (anti-cheat)
       const lastMorningTime = await db.getLastNotificationTime(profile.id, 'morning_checkin');
       if (lastMorningTime) {
         const today = getRomaniaDate();
@@ -274,9 +274,9 @@ export function initBot() {
         // Doar dacă morning checkin a fost trimis AZI verificăm timpul minim
         if (lastDate === today) {
           const minutesSinceMorning = Math.floor((Date.now() - new Date(lastMorningTime).getTime()) / 60000);
-          if (minutesSinceMorning < 20) {
+          if (minutesSinceMorning < 30) {
             await bot.sendMessage(chatId,
-              `Antrenamentul corect durează minim 20 minute. Ai primit reminder-ul acum ${minutesSinceMorning} ${minutesSinceMorning === 1 ? 'minut' : 'minute'}.\n\nDă-i timpul cuvenit corpului — apoi bifează.`
+              `Un antrenament corect durează 50-60 minute. Ai primit reminder-ul acum ${minutesSinceMorning} ${minutesSinceMorning === 1 ? 'minut' : 'minute'}.\n\nDă-i timpul cuvenit corpului — apoi bifează.`
             );
             return;
           }
