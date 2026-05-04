@@ -602,13 +602,10 @@ export async function sendAntiChurnMessage(profile, riskLevel, daysSince) {
 }
 
 export async function sendWeeklyReview(profile, stats) {
-  if (!bot || !profile.telegram_chat_id) return;
-  
-  const review = await ai.generateWeeklyReview(profile, stats);
-  if (review) {
-    await bot.sendMessage(profile.telegram_chat_id, review, { parse_mode: 'Markdown' });
-    await db.logNotification(profile.id, 'weekly_review', 'telegram', 'Weekly review sent');
-  }
+  // DEZACTIVAT pentru MVP — prompt-ul AI generează halucinații (sfaturi inventate,
+  // promisiuni de funcții inexistente). Sam trimite mesaj manual personalizat duminică seara.
+  // Reactivat după validare MVP cu prompt strict, doar fapte.
+  return;
 }
 
 export async function sendPostProgramMessage(profile, daysSinceCompletion) {
