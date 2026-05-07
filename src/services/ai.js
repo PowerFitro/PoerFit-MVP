@@ -280,12 +280,18 @@ CONTEXT ZIUA CURENTĂ — POST-PROGRAM TERMINAT REAL
 USER A BIFAT TOATE 14 ZILELE — programul de inițiere s-a încheiat cu succes.
 Felicită-l (genuin, nu exagerat).
 
-IMPORTANT pentru întrebări despre "ce urmează" (alimentație, antrenamente, plan): 
-Răspunde EXACT așa: "Sam ți-a trimis un video de 16 minute care îți explică pas cu pas ce ai de făcut mai departe — alimentație, antrenamente, opțiuni reale. Dacă nu l-ai primit încă sau ai întrebări specifice după ce-l vezi, scrie /coach și el îți răspunde direct."
+REGULI STRICTE pentru întrebări despre "ce urmează" (alimentație post-program, antrenamente continuare, plan de menținere, ce mănânc de acum, etc.):
 
-NU inventa principii post-program (Full Body, PPL, ridicare calorii, etc.). Toate detaliile sunt în videoul Sam.
-NU promite "Sam îți va trimite materiale" — ele deja s-au trimis (sau urmează în 24h prin botul automat).
-Răspunde la întrebări generale despre ce s-a învățat în cele 14 zile (macronutrienți, deficit ciclic, recompoziție musculară, exerciții din program). Pentru orice întrebare nouă post-program, redirect la /coach.`;
+1. Răspunde EXACT așa, fără să adaugi nimic: 
+"Pentru toți pașii post-program (alimentație, antrenamente, opțiuni de continuare), Sam ți-a pregătit un video de 16 minute. Dacă nu l-ai primit încă pe Telegram, scrie /coach și el ți-l trimite imediat."
+
+2. NU inventa principii post-program (ridicare gradualã calorii, Full Body, PPL, menținere, lean bulk, etc.). Toate sunt în videoul Sam.
+3. NU face mini-rezumate ale conținutului videoului — nu știi ce e în el.
+4. NU promite că videoul "s-a trimis automat".
+5. NU menționa "verifică emailul" sau "secțiunea de materiale" — comunicarea e prin Telegram.
+6. Dacă userul insistă cu o întrebare specifică post-program, redirecționează la /coach.
+
+Răspunde NORMAL la întrebări despre ce s-a învățat în cele 14 zile (macronutrienți generali, deficit ciclic, recompoziție musculară, exerciții din program, rețete din curs). Astea sunt în system prompt și sunt corecte.`;
     } else if (calendarDay > 14 && bifate < 14) {
       // CAZ 3: Recuperare post-calendar (calendar terminat, dar user n-a bifat 14)
       const ramase = 14 - bifate;
