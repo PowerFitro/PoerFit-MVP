@@ -37,6 +37,7 @@ DESPRE PROGRAM:
 - Ambele variante urmăresc același obiectiv: reducerea grăsimii subcutanate + îmbunătățirea tonusului
 - Planul alimentar este identic indiferent de varianta de antrenament aleasă
 - Accesul la materiale rămâne disponibil încă 4 săptămâni după terminarea programului
+- DUPĂ Z14: programul de 14 zile e doar inițierea. Sam are pregătit un VIDEO DE TRANZIȚIE de 16 minute care explică ce urmează (alimentație, antrenamente, opțiuni). Pentru întrebări specifice post-program, redirecționează către videoul Sam (trimis automat la Day+1) sau către /coach.
 
 STRUCTURA SĂPTĂMÂNII (identică în ambele săptămâni):
 - Ziua 1: Antrenament forță (picioare/piept/abdomen sau combinații)
@@ -46,7 +47,7 @@ STRUCTURA SĂPTĂMÂNII (identică în ambele săptămâni):
 - Ziua 5: Antrenament fundamental + grupă deficitară (sau circuit total body la outdoor în Săpt 1)
 - Ziua 6: Volum total (tracțiuni + dips + squat sau combinații)
 - Ziua 7: ZI DE ODIHNĂ
-- Ziua 14: ZI DE ODIHNĂ — programul s-a încheiat
+- Ziua 14: ZI DE ODIHNĂ — programul de 14 zile s-a încheiat (continuitate post-program în videoul de tranziție trimis de Sam)
 
 DIFERENȚE ÎNTRE GRUPE:
 - Sală: accent pe masă musculară + definire. Scăderea în greutate e mai lentă (se construiește mușchi simultan)
@@ -224,6 +225,7 @@ REGULI DE RĂSPUNS
 - NICIODATĂ nu da sfaturi medicale specifice
 - NICIODATĂ nu spune "antrenament de 30 minute" — antrenamentele durează 60-90 minute
 - Programul are 14 zile total. Zilele 7 și 14 sunt zile de odihnă. NICIODATĂ nu spune că o zi de odihnă conține exerciții.
+- NICIODATĂ nu spune userului "felicitări că ai terminat 14 zile" decât dacă în context apare explicit "USER A BIFAT TOATE 14 ZILELE". Dacă userul are mai puține antrenamente bifate decât 14, NU a terminat programul indiferent dacă calendarul a depășit Z14.
 - Când recomanzi alternative alimentare, menționează că trebuie respectat aportul caloric și macronutrienții`;
 
 // ============================================
@@ -247,6 +249,11 @@ PROFILUL CLIENTULUI
 - Restricții alimentare: ${userProfile.dietary_restrictions?.join(', ') || 'Niciuna'}` : '';
 
   // Construim contextul zilei curente — sursa de adevăr pentru AI
+  // 4 cazuri distincte (ordinea contează — verificate de sus în jos):
+  //   1) Pre-program (calendar nu a început)
+  //   2) Calendar trecut Z14 + USER A BIFAT 14 → terminat real (rar)
+  //   3) Calendar trecut Z14 + USER NU a bifat 14 → recuperare post-calendar (frecvent)
+  //   4) În program normal (calendar 1-14)
   let dayContext = '';
   if (userProfile) {
     const equipment = userProfile.equipment === 'outdoor' ? 'outdoor' : 'gym';
@@ -254,7 +261,7 @@ PROFILUL CLIENTULUI
     const bifate = userProfile.current_day || 0;
 
     if (calendarDay === null || calendarDay <= 0) {
-      // Programul nu a început încă
+      // CAZ 1: Pre-program
       dayContext = `
 
 =============================================
@@ -264,16 +271,49 @@ Programul nu a început încă. User-ul e în faza de pregătire (pre-program).
 Nu îi da detalii despre antrenamentele zilelor 1-14 până când programul nu începe.
 Dacă întreabă "ce am azi", spune-i că programul începe luni și până atunci poate parcurge materialele de pregătire (calculul macronutrienților, antrenamentul pregătitor, lista de cumpărături).`;
     } else if (calendarDay > 14 && bifate >= 14) {
-      // Program complet finalizat
+      // CAZ 2: Terminat real (USER A BIFAT TOATE 14 ZILELE)
       dayContext = `
 
 =============================================
-CONTEXT ZIUA CURENTĂ
+CONTEXT ZIUA CURENTĂ — POST-PROGRAM TERMINAT REAL
 =============================================
-User-ul a terminat complet programul de 14 zile. E în faza post-program.
-Felicită-l pentru finalizare. Răspunde la întrebări despre menținerea rezultatelor sau pașii următori.`;
+USER A BIFAT TOATE 14 ZILELE — programul de inițiere s-a încheiat cu succes.
+Felicită-l (genuin, nu exagerat).
+
+IMPORTANT pentru întrebări despre "ce urmează" (alimentație, antrenamente, plan): 
+Răspunde EXACT așa: "Sam ți-a trimis un video de 16 minute care îți explică pas cu pas ce ai de făcut mai departe — alimentație, antrenamente, opțiuni reale. Dacă nu l-ai primit încă sau ai întrebări specifice după ce-l vezi, scrie /coach și el îți răspunde direct."
+
+NU inventa principii post-program (Full Body, PPL, ridicare calorii, etc.). Toate detaliile sunt în videoul Sam.
+NU promite "Sam îți va trimite materiale" — ele deja s-au trimis (sau urmează în 24h prin botul automat).
+Răspunde la întrebări generale despre ce s-a învățat în cele 14 zile (macronutrienți, deficit ciclic, recompoziție musculară, exerciții din program). Pentru orice întrebare nouă post-program, redirect la /coach.`;
+    } else if (calendarDay > 14 && bifate < 14) {
+      // CAZ 3: Recuperare post-calendar (calendar terminat, dar user n-a bifat 14)
+      const ramase = 14 - bifate;
+      const nextLogicDay = bifate + 1;
+      const nextDayText = formatDayForAI(nextLogicDay, equipment);
+      const daysOverdue = calendarDay - 14;
+      
+      dayContext = `
+
+=============================================
+CONTEXT ZIUA CURENTĂ — RECUPERARE POST-CALENDAR
+=============================================
+ATENȚIE: User-ul NU a terminat programul. Calendarul a depășit Z14, DAR user-ul are bifate doar ${bifate} antrenamente din 14.
+- Calendar a trecut acum ${daysOverdue} ${daysOverdue === 1 ? 'zi' : 'zile'} (azi e Ziua ${calendarDay} dacă am număra).
+- User-ul are ${bifate} antrenamente bifate, mai are ${ramase} de făcut pentru a finaliza programul de bază.
+- Următorul antrenament logic dacă recuperează: Ziua ${nextLogicDay}.
+
+REGULI STRICTE pentru această stare:
+1. NU spune "felicitări că ai terminat 14 zile" — user-ul NU a terminat.
+2. NU spune "programul s-a încheiat oficial" ca felicitare — programul calendar a expirat, dar user-ul mai are antrenamente nefăcute.
+3. NU spune "sărbătorești" — n-are ce să sărbătorească încă.
+4. Mesaj corect: "Calendarul s-a încheiat, dar tu mai ai ${ramase} antrenamente nefăcute. Următorul ar fi Ziua ${nextLogicDay}. Le recuperezi când vrei — nu sunt obligatorii, dar dacă vrei rezultatul complet al programului, e bine să le faci."
+5. Dacă user-ul întreabă "ce am de făcut azi?", răspunde că poate alege: să recupereze Ziua ${nextLogicDay} sau să se odihnească. Nu impune nimic.
+
+--- ANTRENAMENTUL URMĂTOR LOGIC (Ziua ${nextLogicDay}, dacă alege să recupereze) ---
+${nextDayText}`;
     } else {
-      // Program în desfășurare — calculăm ziua-logic și ziua-calendar
+      // CAZ 4: Program normal în desfășurare (calendar 1-14)
       const nextLogicDay = bifate < 14 ? bifate + 1 : null;
       const calendarClamped = Math.min(calendarDay, 14);
 
