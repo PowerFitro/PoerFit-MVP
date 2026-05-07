@@ -550,20 +550,48 @@ export async function sendMorningCheckin(profile) {
   if (!bot || !profile.telegram_chat_id) return;
   
   // Calculăm ziua calendaristică din program_start_date
-  // Programul are 14 zile fixe — calendar dictează, nu numărul de bifări
   const calendarDay = getCalendarProgramDay(profile.program_start_date);
+  const bifate = profile.current_day || 0;
   
-  // Programul nu a început (pre-program) sau s-a terminat fereastra de 14 zile
+  // Programul nu a început (pre-program)
   if (calendarDay === null || calendarDay <= 0) return;
-  if (calendarDay > 14) return;
   
+  // CAZ SPECIAL: Calendar > 14 + USER A BIFAT TOATE 14 → terminat real, nu mai trimitem morning
+  if (calendarDay > 14 && bifate >= 14) return;
+  
+  // CAZ SPECIAL: Calendar > 14 + USER N-A bifat 14 → recuperare post-calendar
+  if (calendarDay > 14 && bifate < 14) {
+    const ramase = 14 - bifate;
+    const nextLogicDay = bifate + 1;
+    const nextDayInfo = getDayInfo(nextLogicDay);
+    const daysOverdue = calendarDay - 14;
+    
+    const message = 'Bună dimineața, ' + profile.full_name + '!\n\n' +
+      'Programul calendar de 14 zile s-a încheiat acum ' + daysOverdue + ' ' + (daysOverdue === 1 ? 'zi' : 'zile') + '.\n' +
+      'Tu mai ai ' + ramase + ' ' + (ramase === 1 ? 'antrenament' : 'antrenamente') + ' de făcut pentru a finaliza programul de bază.\n\n' +
+      'Următorul ar fi Ziua ' + nextLogicDay + ' — ' + nextDayInfo + '\n\n' +
+      'Te încurajez să termini ce-ai început. După ce bifezi toate 14, primești instrucțiunile pentru ce urmează.';
+    
+    await bot.sendMessage(profile.telegram_chat_id, message, {
+      reply_markup: {
+        inline_keyboard: [[
+          { text: 'Recuperez Ziua ' + nextLogicDay + ' azi', callback_data: 'workout_yes' }
+        ]]
+      }
+    });
+    
+    await db.logNotification(profile.id, 'morning_checkin', 'telegram', 'Recovery: ' + ramase + ' workouts left, calendar overdue');
+    return;
+  }
+  
+  // De aici încolo: calendar e între 1 și 14 (program normal)
   const dayInfo = getDayInfo(calendarDay);
   const isRestDay = calendarDay === 7 || calendarDay === 14;
   const isCardioDay = calendarDay === 4 || calendarDay === 11;
   
   // Pentru zilele de odihnă: avansăm automat current_day ca să nu rămână userul blocat
   // Asta evită bucla infinită cu Z7/Z14 (Bug B)
-  if (isRestDay && (profile.current_day || 0) < calendarDay) {
+  if (isRestDay && bifate < calendarDay) {
     await db.updateProfile(profile.id, { current_day: calendarDay });
   }
   
@@ -571,10 +599,21 @@ export async function sendMorningCheckin(profile) {
   
   if (isRestDay) {
     if (calendarDay === 14) {
-      message = 'Bună dimineața, ' + profile.full_name + '!\n\n' +
-        'Ziua 14/14 — Zi de odihnă. Programul PowerFit s-a încheiat oficial.\n\n' +
-        'Felicitări că ai dus 14 zile la capăt. Azi te odihnești complet. În curând primești raportul transformării tale.';
+      // Z14 calendar — mesaj diferit dacă user a bifat tot vs n-a bifat tot
+      if (bifate >= 14) {
+        // A terminat real — felicitare
+        message = 'Bună dimineața, ' + profile.full_name + '!\n\n' +
+          'Ziua 14/14 — Zi de odihnă. Ai dus la capăt programul de 14 zile.\n\n' +
+          'Felicitări. Azi te odihnești complet. Mâine primești instrucțiunile pentru ce urmează.';
+      } else {
+        // Calendar a ajuns la Z14 dar userul n-a bifat tot — onestitate
+        const ramase = 14 - bifate;
+        message = 'Bună dimineața, ' + profile.full_name + '!\n\n' +
+          'Ziua 14/14 calendaristic — Zi de odihnă.\n\n' +
+          'Ai bifat ' + bifate + ' din 14 antrenamente. Mai sunt ' + ramase + ' ' + (ramase === 1 ? 'antrenament' : 'antrenamente') + ' nefăcute. Le poți recupera în zilele următoare — programul nu se închide până nu termini.';
+      }
     } else {
+      // Z7 odihnă
       message = 'Bună dimineața, ' + profile.full_name + '!\n\n' +
         'Ziua ' + calendarDay + '/14 — Zi de odihnă.\n\n' +
         'Corpul tău se recuperează și crește azi. Respectă planul alimentar și odihnește-te. Mâine revenim la treabă.';
@@ -675,42 +714,27 @@ export async function sendPostProgramMessage(profile, daysSinceCompletion) {
   
   switch(daysSinceCompletion) {
     case 1:
+      // Felicitare + anunț video tranziție (Sam îl trimite manual)
       const stats = await db.getCheckinStats(profile.id);
       const avgD = stats.avgDifficulty ? stats.avgDifficulty.toFixed(1) : '—';
-      message = `Raportul tău PowerFit\n\n` +
-        `Program: 14 zile\n` +
+      message = `Felicitări, ${profile.full_name}!\n\n` +
+        `Ai dus la capăt programul de 14 zile.\n` +
         `Antrenamente completate: ${stats.totalWorkouts}\n` +
         `Dificultate medie: ${avgD}/5\n\n` +
-        `Ai demonstrat că poți. Asta nu e un final — e un început.`;
+        `Acum urmează partea importantă — tranziția. Sam îți trimite în următoarele 24 de ore un video de 16 minute care îți explică exact ce ai de făcut mai departe (alimentație, antrenamente, opțiuni reale).\n\n` +
+        `Între timp, sunt aici pentru orice întrebare despre cele 14 zile pe care tocmai le-ai dus la capăt.`;
       break;
     case 3:
-      message = `Hei ${profile.full_name}! 💬\n\n` +
-        `Când ai început PowerFit, ai spus că obiectivul tău e *${profile.goal === 'fat_loss' ? 'pierderea de grăsime' : profile.goal === 'toning' ? 'tonifierea' : 'creșterea masei musculare'}*.\n\n` +
-        `Cum te simți acum față de atunci?\n\n` +
-        `Trimite-mi 2-3 propoziții sau un voice note — vreau să știu experiența ta reală. Feedback-ul tău contează enorm! 🙏`;
-      break;
-    case 7:
-      message = `Hei ${profile.full_name}! O săptămână de la finalizarea PowerFit. 💪\n\n` +
-        `Ce faci de aici? 3 opțiuni:\n\n` +
-        `1️⃣ *Repetă PowerFit* cu intensitate crescută\n` +
-        `2️⃣ *Program avansat* de 30 zile (scrie-mi pentru detalii)\n` +
-        `3️⃣ *Coaching 1:1* cu antrenorul (scrie /coach)\n\n` +
-        `Ce te interesează?`;
-      break;
-    case 14:
-      message = `${profile.full_name}, au trecut 2 săptămâni de la finalizare.\n\n` +
-        `Ai menținut obiceiurile? Scrie-mi cum merge și cum te pot ajuta în continuare. 💬`;
-      break;
-    case 30:
-      message = `${profile.full_name}, o lună de la PowerFit! 🗓️\n\n` +
-        `Sper că obiceiurile construite în cele 14 zile au rămas. Dacă vrei să continui cu un program avansat sau coaching personalizat, sunt aici.\n\n` +
-        `Mult succes în continuare! 💪🔥`;
+      // Re-engagement scurt — verifică dacă a primit/văzut video-ul
+      message = `${profile.full_name}, ai apucat să vezi videoul de tranziție trimis de Sam?\n\n` +
+        `Dacă da și ai întrebări — sunt aici. Dacă încă nu l-ai primit, scrie /coach și îl anunț pe Sam.`;
       break;
     default:
+      // Day+7, +14, +30 scoase pentru MVP — Sam contactează manual primii clienți
       return;
   }
   
-  await bot.sendMessage(profile.telegram_chat_id, message, { parse_mode: 'Markdown' });
+  await bot.sendMessage(profile.telegram_chat_id, message);
   await db.logNotification(profile.id, 'post_program', 'telegram', `Day ${daysSinceCompletion} post-program`);
 }
 
