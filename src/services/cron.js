@@ -25,7 +25,7 @@ export function initCronJobs() {
           await sendPreProgramMessage(profile, startDate);
           await sleep(1000);
         } else {
-          // IN-PROGRAM: send regular training check-in (gestionează intern Z7/Z14 odihnă)
+          // IN-PROGRAM: send regular training check-in (gestionează intern Z7/Z14 odihnă + recuperare după calendar)
           await sendMorningCheckin(profile);
           await sleep(1000);
         }
@@ -49,12 +49,14 @@ export function initCronJobs() {
         // Skip pre-program users (no evening check-in before start)
         if (profile.program_start_date && today < profile.program_start_date) continue;
         
-        // Skip program-finished users (post-program flow preia)
-        const calendarDay = getCalendarProgramDay(profile.program_start_date);
-        if (calendarDay === null || calendarDay > 14) continue;
-        
         // Skip rest days (Z7 și Z14 — n-are ce să bifeze)
+        const calendarDay = getCalendarProgramDay(profile.program_start_date);
+        if (calendarDay === null || calendarDay <= 0) continue;
         if (calendarDay === 7 || calendarDay === 14) continue;
+        
+        // NOTĂ: nu mai facem skip la calendar > 14. Dacă userul e în recuperare
+        // (calendar trecut Z14 dar bifate < 14), evening checkin trebuie să-l încurajeze să bifeze.
+        // sendEveningCheckin gestionează intern (verifică dacă a bifat deja azi).
         
         const alreadySent = await db.wasNotificationSentToday(profile.id, 'evening_checkin');
         if (!alreadySent) {
@@ -77,12 +79,15 @@ export function initCronJobs() {
       const profiles = await db.getAllActiveProfiles();
       
       for (const profile of profiles) {
-        // Skip dacă e zi de odihnă în program (normal să nu bifeze nimic)
+        // Skip dacă programul nu a început
         const calendarDay = getCalendarProgramDay(profile.program_start_date);
+        if (calendarDay === null || calendarDay <= 0) continue;
+        
+        // Skip dacă e zi de odihnă în program (normal să nu bifeze nimic)
         if (calendarDay === 7 || calendarDay === 14) continue;
         
-        // Skip dacă programul nu a început sau s-a încheiat
-        if (calendarDay === null || calendarDay <= 0 || calendarDay > 14) continue;
+        // NOTĂ: Anti-churn rulează și pentru userii în recuperare (calendar > 14, bifate < 14)
+        // pentru a-i încuraja să termine cele 14 zile.
         
         const lastCheckin = await db.getLastCheckin(profile.id);
         
@@ -134,78 +139,17 @@ export function initCronJobs() {
   // Reactivat după validare MVP cu prompt strict, doar fapte.
   /*
   cron.schedule('0 19 * * 0', async () => {
-    console.log('[CRON] Weekly review starting...');
-    try {
-      const profiles = await db.getAllActiveProfiles();
-      
-      for (const profile of profiles) {
-        const recentCheckins = await db.getRecentCheckins(profile.id, 7);
-        const workoutCheckins = recentCheckins.filter(c => c.checkin_type === 'workout');
-        
-        const calendarDay = getCalendarProgramDay(profile.program_start_date);
-        const weekNumber = calendarDay !== null ? Math.ceil(calendarDay / 7) : 1;
-        
-        const stats = {
-          weekNumber: weekNumber,
-          workoutsCompleted: workoutCheckins.filter(c => c.workout_completed).length,
-          avgDifficulty: workoutCheckins.length > 0 
-            ? workoutCheckins.reduce((s, c) => s + (c.difficulty_rating || 3), 0) / workoutCheckins.length 
-            : 0,
-          painZones: [...new Set(workoutCheckins.flatMap(c => c.pain_zones || []))],
-          avgEnergy: workoutCheckins.length > 0
-            ? workoutCheckins.map(c => c.energy_level).filter(Boolean).join(', ')
-            : 'nelogată'
-        };
-        
-        await sendWeeklyReview(profile, stats);
-        await sleep(2000);
-      }
-      console.log('[CRON] Weekly reviews sent');
-    } catch (error) {
-      console.error('[CRON] Weekly review error:', error);
-    }
+    // ... cod arhivat
   }, { timezone: 'Europe/Bucharest' });
   */
 
   // ============================================
-  // Zilnic 09:30 — Auto-mark Program Complete (Z14 calendar)
+  // Auto-mark Program Complete — ELIMINAT
   // ============================================
-  // Detectează userii care au depășit Z14 calendar și marchează program_completed
-  // automat. Asta declanșează post-program flow chiar dacă userul nu a bifat ultima zi.
-  cron.schedule('30 9 * * *', async () => {
-    console.log('[CRON] Auto-mark program complete starting...');
-    try {
-      const profiles = await db.getAllActiveProfiles();
-      
-      for (const profile of profiles) {
-        // Skip cei deja marcați complete
-        if (profile.program_completed) continue;
-        
-        // Skip dacă programul nu a început
-        if (!profile.program_start_date) continue;
-        
-        const calendarDay = getCalendarProgramDay(profile.program_start_date);
-        
-        // Marchează complete dacă a depășit Z14 calendar
-        if (calendarDay !== null && calendarDay >= 14) {
-          // Calculez data Z14 (program_start_date + 13 zile)
-          const startDate = new Date(profile.program_start_date + 'T00:00:00');
-          const completedDate = new Date(startDate);
-          completedDate.setDate(completedDate.getDate() + 13);
-          
-          await db.updateProfile(profile.id, {
-            program_completed: true,
-            program_completed_date: completedDate.toISOString()
-          });
-          
-          console.log(`[CRON] Auto-marked program complete for user ${profile.id} (calendar day: ${calendarDay})`);
-        }
-      }
-      console.log('[CRON] Auto-mark complete check finished');
-    } catch (error) {
-      console.error('[CRON] Auto-mark complete error:', error);
-    }
-  }, { timezone: 'Europe/Bucharest' });
+  // Decizie strategică (script video tranziție): programul se marchează "completed" DOAR
+  // când userul bifează 14 antrenamente reale (asta se întâmplă în telegram.js difficulty_rating).
+  // Calendar trecut Z14 + bifate < 14 = user în recuperare, NU terminat. Va termina când recuperează.
+  // Day+1 post-program (videoul de tranziție) vine ABIA după ce userul finalizează inițierea.
 
   // ============================================
   // Zilnic 10:00 — Post-Program Sequence Check
@@ -223,8 +167,9 @@ export function initCronJobs() {
           (Date.now() - completedDate.getTime()) / (1000 * 60 * 60 * 24)
         );
         
-        // Only send at specific milestones
-        if ([1, 3, 7, 14, 30].includes(daysSince)) {
+        // Trimitem doar Day+1 și Day+3 (restul sunt scoase pentru MVP)
+        // sendPostProgramMessage gestionează intern care zi e validă (return early pentru altele)
+        if ([1, 3].includes(daysSince)) {
           const alreadySent = await db.wasNotificationSentToday(profile.id, 'post_program');
           if (!alreadySent) {
             await sendPostProgramMessage(profile, daysSince);
