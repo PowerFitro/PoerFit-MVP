@@ -100,26 +100,26 @@ export function initCronJobs() {
         // Calculate risk score
         const riskScore = calculateRiskScore(profile, daysSince);
         
+        // Cooldown global 48h: NU trimite anti-churn dacă s-a trimis în ultimele 48 ore
+        // (indiferent de risk level — evităm mesaje în zile consecutive)
+        if (riskScore >= 5) {
+          const recentlySent = await db.wasNotificationSentInLastHours(profile.id, 'anti_churn', 48);
+          if (recentlySent) {
+            await sleep(500);
+            continue;
+          }
+        }
+        
         if (riskScore >= 20) {
-          const alreadySent = await db.wasNotificationSentToday(profile.id, 'anti_churn');
-          if (!alreadySent) {
-            await sendAntiChurnMessage(profile, 'high', daysSince);
-            
-            // Reset streak if inactive > 1 day
-            if (daysSince > 1 && profile.current_streak > 0) {
-              await db.updateProfile(profile.id, { current_streak: 0 });
-            }
+          await sendAntiChurnMessage(profile, 'high', daysSince);
+          // Reset streak if inactive > 1 day
+          if (daysSince > 1 && profile.current_streak > 0) {
+            await db.updateProfile(profile.id, { current_streak: 0 });
           }
         } else if (riskScore >= 10) {
-          const alreadySent = await db.wasNotificationSentToday(profile.id, 'anti_churn');
-          if (!alreadySent) {
-            await sendAntiChurnMessage(profile, 'medium', daysSince);
-          }
+          await sendAntiChurnMessage(profile, 'medium', daysSince);
         } else if (riskScore >= 5) {
-          const alreadySent = await db.wasNotificationSentToday(profile.id, 'anti_churn');
-          if (!alreadySent) {
-            await sendAntiChurnMessage(profile, 'low', daysSince);
-          }
+          await sendAntiChurnMessage(profile, 'low', daysSince);
         }
         
         await sleep(500);
