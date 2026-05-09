@@ -1,9 +1,7 @@
 import TelegramBot from 'node-telegram-bot-api';
 import * as db from '../db/supabase.js';
 import * as ai from '../services/ai.js';
-import { processWorkoutCompletion, processStreakBonus } from '../services/gamification.js';
 import { getCalendarProgramDay, getRomaniaDate } from '../utils/helpers.js';
-import https from 'https';
 
 let bot;
 
@@ -306,26 +304,11 @@ export function initBot() {
       });
       
       // Update profile day — programul s-a încheiat dacă userul a bifat 14 antrenamente reale
-      // (NU mai marcăm program_completed pe baza calendarDay aici — cron-ul auto-mark face asta separat)
       const userFinishedAllWorkouts = newDay >= 14;
       await db.updateProfile(profile.id, { 
         current_day: newDay,
         ...(userFinishedAllWorkouts ? { program_completed: true, program_completed_date: new Date().toISOString() } : {})
       });
-      
-      // Tracking intern (gamification invizibilă către user)
-      await processWorkoutCompletion(profile.id);
-      
-      // Update streak (intern, nu se afișează)
-      const updatedProfile = await db.getProfileByTelegramId(query.from.id);
-      const newStreak = (updatedProfile.current_streak || 0) + 1;
-      const maxStreak = Math.max(newStreak, updatedProfile.max_streak || 0);
-      await db.updateProfile(profile.id, { current_streak: newStreak, max_streak: maxStreak });
-      
-      // Procesăm bonus streak intern (fără afișare)
-      if (newStreak === 3 || newStreak === 7 || newStreak === 14) {
-        await processStreakBonus(profile.id, newStreak);
-      }
       
       // Build response — coach uman, fără gamification
       // 3 cazuri distincte:
@@ -336,7 +319,7 @@ export function initBot() {
       
       if (userFinishedAllWorkouts) {
         // Cazul A — terminat real
-        response = `Ziua 14 bifată — programul PowerFit s-a încheiat oficial.\n\nFelicitări că ai dus 14 zile la capăt. În curând primești raportul complet al transformării tale.`;
+        response = `Ziua 14 bifată — programul PowerFit s-a încheiat.\n\nFelicitări că ai dus 14 zile la capăt. Sam te contactează personal pentru pașii următori.`;
       } else if (calendarDay !== null && calendarDay > 14) {
         // Cazul B — recuperare după ce calendarul a trecut
         const daysOverdue = calendarDay - 14;
@@ -417,79 +400,6 @@ export function initBot() {
       await bot.sendMessage(chatId, 'Scrie-mi întrebarea ta și răspund imediat! 💬');
     }
   });
-
-  // ============================================
-  // PHOTO MESSAGE — Food Log
-  // ============================================
-  // DISABLED: Food photo analysis
-  /* bot.on('photo_disabled', async (msg) => {
-    const chatId = msg.chat.id;
-    const profile = await db.getProfileByTelegramId(msg.from.id);
-    
-    if (!profile) {
-      await bot.sendMessage(chatId, 'Trebuie să te conectezi mai întâi. Scrie /start');
-      return;
-    }
-    
-    await bot.sendMessage(chatId, '🔍 Analizez masa ta...');
-    
-    try {
-      // Get photo file
-      const photo = msg.photo[msg.photo.length - 1]; // Highest resolution
-      const file = await bot.getFile(photo.file_id);
-      const fileUrl = `https://api.telegram.org/file/bot${process.env.TELEGRAM_BOT_TOKEN}/${file.file_path}`;
-      
-      // Download and convert to base64
-      const base64 = await downloadAsBase64(fileUrl);
-      
-      // Analyze with Claude Vision
-      const analysis = await ai.analyzeFoodPhoto(base64, profile);
-      
-      if (analysis) {
-        // Save to food log
-        const today = new Date().toISOString().split('T')[0];
-        await db.saveFoodLog({
-          user_id: profile.id,
-          log_date: today,
-          meal_type: 'other',
-          description: analysis.description,
-          estimated_calories: analysis.calories,
-          protein_g: analysis.protein,
-          fat_g: analysis.fat,
-          carbs_g: analysis.carbs,
-          ai_feedback: analysis.feedback,
-          photo_file_id: photo.file_id
-        });
-        
-        // Add points for food logging
-        const pointsResult = await db.addPoints(profile.id, POINTS.FOOD_LOG_PHOTO, 'food_log');
-        
-        // Get today's totals
-        const todayLogs = await db.getTodayFoodLogs(profile.id);
-        const totalCals = todayLogs.reduce((sum, l) => sum + (l.estimated_calories || 0), 0);
-        const totalProtein = todayLogs.reduce((sum, l) => sum + (l.protein_g || 0), 0);
-        const target = profile.daily_calorie_target || 2000;
-        
-        await bot.sendMessage(chatId,
-          `🍽️ *${analysis.description}*\n\n` +
-          `🔸 Calorii: *${analysis.calories}* kcal\n` +
-          `🔸 Proteine: *${analysis.protein}*g\n` +
-          `🔸 Grăsimi: *${analysis.fat}*g\n` +
-          `🔸 Carbohidrați: *${analysis.carbs}*g\n\n` +
-          `${analysis.feedback}\n\n` +
-          `📊 *Total azi:* ${totalCals}/${target} kcal | ${totalProtein.toFixed(0)}g proteine\n` +
-          `🍽️ Mese logate: ${todayLogs.length}\n` +
-          `+${POINTS.FOOD_LOG_PHOTO} puncte`,
-          { parse_mode: 'Markdown' }
-        );
-      } else {
-        await bot.sendMessage(chatId, 'Nu am reușit să analizez poza. Încearcă cu o poză mai clară, de sus, cu toată masa vizibilă. 📸');
-      }
-    } catch (error) {
-      console.error('Photo processing error:', error);
-      await bot.sendMessage(chatId, 'A apărut o eroare la procesarea pozei. Încearcă din nou.');
-    }
-  }); */
 
   // ============================================
   // TEXT MESSAGE — Asistentul PowerFit Chat
@@ -700,44 +610,6 @@ export async function sendAntiChurnMessage(profile, riskLevel, daysSince) {
   }
 }
 
-export async function sendWeeklyReview(profile, stats) {
-  // DEZACTIVAT pentru MVP — prompt-ul AI generează halucinații (sfaturi inventate,
-  // promisiuni de funcții inexistente). Sam trimite mesaj manual personalizat duminică seara.
-  // Reactivat după validare MVP cu prompt strict, doar fapte.
-  return;
-}
-
-export async function sendPostProgramMessage(profile, daysSinceCompletion) {
-  if (!bot || !profile.telegram_chat_id) return;
-  
-  let message;
-  
-  switch(daysSinceCompletion) {
-    case 1:
-      // Felicitare + anunț video tranziție (Sam îl trimite manual)
-      const stats = await db.getCheckinStats(profile.id);
-      const avgD = stats.avgDifficulty ? stats.avgDifficulty.toFixed(1) : '—';
-      message = `Felicitări, ${profile.full_name}!\n\n` +
-        `Ai dus la capăt programul de 14 zile.\n` +
-        `Antrenamente completate: ${stats.totalWorkouts}\n` +
-        `Dificultate medie: ${avgD}/5\n\n` +
-        `Acum urmează partea importantă — tranziția. Sam îți trimite în următoarele 24 de ore un video de 16 minute care îți explică exact ce ai de făcut mai departe (alimentație, antrenamente, opțiuni reale).\n\n` +
-        `Între timp, sunt aici pentru orice întrebare despre cele 14 zile pe care tocmai le-ai dus la capăt.`;
-      break;
-    case 3:
-      // Re-engagement scurt — verifică dacă a primit/văzut video-ul
-      message = `${profile.full_name}, ai apucat să vezi videoul de tranziție trimis de Sam?\n\n` +
-        `Dacă da și ai întrebări — sunt aici. Dacă încă nu l-ai primit, scrie /coach și îl anunț pe Sam.`;
-      break;
-    default:
-      // Day+7, +14, +30 scoase pentru MVP — Sam contactează manual primii clienți
-      return;
-  }
-  
-  await bot.sendMessage(profile.telegram_chat_id, message);
-  await db.logNotification(profile.id, 'post_program', 'telegram', `Day ${daysSinceCompletion} post-program`);
-}
-
 // ============================================
 // HELPER FUNCTIONS
 // ============================================
@@ -760,12 +632,6 @@ function getDayInfo(dayNumber) {
     14: 'Zi de odihna - PROGRAMUL S-A INCHEIAT!',
   };
   return schedule[dayNumber] || 'Antrenament';
-}
-
-function generateProgressBar(percentage) {
-  const filled = Math.round(percentage / 10);
-  const empty = 10 - filled;
-  return '▓'.repeat(filled) + '░'.repeat(empty);
 }
 
 
@@ -822,20 +688,6 @@ export async function sendPreProgramMessage(profile, startDate) {
 
 function getCoachName() {
   return process.env.COACH_NAME || 'Antrenorul';
-}
-
-function downloadAsBase64(url) {
-  return new Promise((resolve, reject) => {
-    https.get(url, (res) => {
-      const chunks = [];
-      res.on('data', (chunk) => chunks.push(chunk));
-      res.on('end', () => {
-        const buffer = Buffer.concat(chunks);
-        resolve(buffer.toString('base64'));
-      });
-      res.on('error', reject);
-    }).on('error', reject);
-  });
 }
 
 export { bot };
