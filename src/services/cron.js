@@ -1,6 +1,6 @@
 import cron from 'node-cron';
 import * as db from '../db/supabase.js';
-import { sendMorningCheckin, sendEveningCheckin, sendAntiChurnMessage, sendPostProgramMessage, sendPreProgramMessage } from '../bot/telegram.js';
+import { sendMorningCheckin, sendEveningCheckin, sendAntiChurnMessage, sendPreProgramMessage } from '../bot/telegram.js';
 import { getRomaniaDate, getCalendarProgramDay } from '../utils/helpers.js';
 
 export function initCronJobs() {
@@ -133,55 +133,8 @@ export function initCronJobs() {
   // ============================================
   // Weekly Review — DEZACTIVAT pentru MVP
   // ============================================
-  // Motivul: prompt-ul AI generează review-uri cu halucinații (sfaturi inventate,
-  // promisiuni de funcții inexistente — gen "loghează mese"). Pentru primii 10 clienți,
-  // Sam trimite mesaj manual personalizat duminică seara.
-  // Reactivat după validare MVP cu prompt strict, doar fapte.
-  /*
-  cron.schedule('0 19 * * 0', async () => {
-    // ... cod arhivat
-  }, { timezone: 'Europe/Bucharest' });
-  */
-
-  // ============================================
-  // Auto-mark Program Complete — ELIMINAT
-  // ============================================
-  // Decizie strategică (script video tranziție): programul se marchează "completed" DOAR
-  // când userul bifează 14 antrenamente reale (asta se întâmplă în telegram.js difficulty_rating).
-  // Calendar trecut Z14 + bifate < 14 = user în recuperare, NU terminat. Va termina când recuperează.
-  // Day+1 post-program (videoul de tranziție) vine ABIA după ce userul finalizează inițierea.
-
-  // ============================================
-  // Zilnic 10:00 — Post-Program Sequence Check
-  // ============================================
-  cron.schedule('0 10 * * *', async () => {
-    console.log('[CRON] Post-program sequence check...');
-    try {
-      const completedProfiles = await db.getCompletedProfiles();
-      
-      for (const profile of completedProfiles) {
-        if (!profile.program_completed_date) continue;
-        
-        const completedDate = new Date(profile.program_completed_date);
-        const daysSince = Math.floor(
-          (Date.now() - completedDate.getTime()) / (1000 * 60 * 60 * 24)
-        );
-        
-        // Trimitem doar Day+1 și Day+3 (restul sunt scoase pentru MVP)
-        // sendPostProgramMessage gestionează intern care zi e validă (return early pentru altele)
-        if ([1, 3].includes(daysSince)) {
-          const alreadySent = await db.wasNotificationSentToday(profile.id, 'post_program');
-          if (!alreadySent) {
-            await sendPostProgramMessage(profile, daysSince);
-            await sleep(1500);
-          }
-        }
-      }
-      console.log('[CRON] Post-program sequence check complete');
-    } catch (error) {
-      console.error('[CRON] Post-program error:', error);
-    }
-  }, { timezone: 'Europe/Bucharest' });
+  // Halucinații în prompt. Sam scrie manual primilor 10 clienți duminică seara.
+  // Reactivat după validare cu prompt strict.
 
   console.log('⏰ Cron jobs initialized (timezone: Europe/Bucharest)');
 }
