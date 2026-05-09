@@ -260,6 +260,21 @@ export async function wasNotificationSentToday(userId, type) {
   return data && data.length > 0;
 }
 
+// Verifică dacă a fost trimisă o notificare în ultimele N ore (cooldown configurabil).
+// Folosit la anti-churn pentru cooldown 48h global (evită mesaje repetate în zile consecutive).
+export async function wasNotificationSentInLastHours(userId, type, hours) {
+  const cutoff = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from('notifications_log')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('notification_type', type)
+    .gte('created_at', cutoff)
+    .limit(1);
+  if (error) return false;
+  return data && data.length > 0;
+}
+
 // Returnează timestamp-ul ultimei notificări trimise userului de un anumit tip.
 // Folosit la anti-cheat (Bug E) — verifică timpul scurs de la morning checkin la bifare.
 export async function getLastNotificationTime(userId, type) {
