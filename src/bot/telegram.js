@@ -43,7 +43,7 @@ export function initBot() {
           });
           
           const welcome = await ai.generateWelcomeMessage(profile);
-          await bot.sendMessage(chatId, welcome, { parse_mode: 'Markdown' });
+          await bot.sendMessage(chatId, welcome);
           return;
         }
       }
@@ -376,7 +376,7 @@ export function initBot() {
           await db.getProfileByTelegramId(query.from.id)
         );
         
-        await bot.sendMessage(chatId, recommendation, { parse_mode: 'Markdown' });
+        await bot.sendMessage(chatId, recommendation);
       }
     }
     
@@ -384,12 +384,11 @@ export function initBot() {
     if (data === 'morning_ready') {
       const dayInfo = getDayInfo(profile.current_day + 1);
       await bot.sendMessage(chatId,
-        `💪 Hai să facem treabă!\n\n📋 *Ziua ${profile.current_day + 1}:* ${dayInfo}\n\n🔗 Deschide lecția în PowerFit și urmează instrucțiunile.\n\nDupă antrenament, scrie /checkin sau apasă butonul de mai jos:`,
+        `Hai să facem treabă.\n\nZiua ${profile.current_day + 1}: ${dayInfo}\n\nDeschide lecția în PowerFit și urmează instrucțiunile.\n\nDupă antrenament, scrie /checkin sau apasă butonul de mai jos.`,
         { 
-          parse_mode: 'Markdown',
           reply_markup: {
             inline_keyboard: [[
-              { text: '✅ Am terminat antrenamentul', callback_data: 'workout_yes' }
+              { text: 'Am terminat antrenamentul', callback_data: 'workout_yes' }
             ]]
           }
         }
@@ -441,7 +440,7 @@ export function initBot() {
       // Save AI response
       await db.saveMessage(profile.id, 'assistant', response);
       
-      await bot.sendMessage(chatId, response, { parse_mode: 'Markdown' });
+      await bot.sendMessage(chatId, response);
     } catch (error) {
       console.error('Chat error:', error);
       await bot.sendMessage(chatId, 'Scuze, am o problemă momentan. Încearcă din nou sau scrie /coach pentru antrenor.');
@@ -590,7 +589,7 @@ export async function sendAntiChurnMessage(profile, riskLevel, daysSince) {
   if (!bot || !profile.telegram_chat_id) return;
   
   const message = await ai.generateAntiChurnMessage(profile, riskLevel, daysSince);
-  await bot.sendMessage(profile.telegram_chat_id, message, { parse_mode: 'Markdown' });
+  await bot.sendMessage(profile.telegram_chat_id, message);
   await db.logNotification(profile.id, 'anti_churn', 'telegram', `Risk: ${riskLevel}, days: ${daysSince}`);
   
   // If high risk, also notify admin
@@ -598,13 +597,11 @@ export async function sendAntiChurnMessage(profile, riskLevel, daysSince) {
     const adminChatId = process.env.TELEGRAM_ADMIN_CHAT_ID;
     if (adminChatId) {
       await bot.sendMessage(adminChatId,
-        `🚨 *RISC RIDICAT ABANDON*\n\n` +
-        `👤 ${profile.full_name} (@${profile.telegram_username || 'N/A'})\n` +
-        `📅 Ziua ${profile.current_day}/14\n` +
-        `⏰ Inactiv de ${daysSince} zile\n` +
-        `🔥 Streak pierdut\n\n` +
-        `Recomandare: contactează-l direct.`,
-        { parse_mode: 'Markdown' }
+        `RISC RIDICAT ABANDON\n\n` +
+        `Client: ${profile.full_name} (@${profile.telegram_username || 'N/A'})\n` +
+        `Ziua: ${profile.current_day}/14\n` +
+        `Inactiv de ${daysSince} zile\n\n` +
+        `Recomandare: contactează-l direct.`
       );
     }
   }
