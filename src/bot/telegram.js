@@ -174,6 +174,22 @@ export function initBot() {
       return;
     }
     
+    // Verificare PRE-PROGRAM: programul nu a început calendaristic
+    const calendarDay = getCalendarProgramDay(profile.program_start_date);
+    if (calendarDay === null || calendarDay <= 0) {
+      const startDate = profile.program_start_date;
+      if (startDate) {
+        await bot.sendMessage(chatId,
+          `Programul începe pe ${startDate}. Până atunci nu ai antrenamente de bifat — folosește timpul pentru pregătire (calculat macronutrienți, lista de cumpărături, antrenament pregătitor).\n\nDacă ai întrebări, scrie-mi oricând.`
+        );
+      } else {
+        await bot.sendMessage(chatId,
+          'Programul nu a fost încă programat pentru tine. Scrie /coach și Sam te ajută să-l setezi.'
+        );
+      }
+      return;
+    }
+    
     // Anti-cheat: verifică dacă a bifat deja azi
     const existingCheckin = await db.getTodayWorkoutCheckin(profile.id);
     if (existingCheckin) {
@@ -215,6 +231,15 @@ export function initBot() {
     
     // --- WORKOUT COMPLETED ---
     if (data === 'workout_yes') {
+      // Verificare PRE-PROGRAM: programul nu a început calendaristic
+      const calDay = getCalendarProgramDay(profile.program_start_date);
+      if (calDay === null || calDay <= 0) {
+        await bot.sendMessage(chatId,
+          'Programul nu a început încă. Nu ai antrenamente de bifat. Pentru întrebări scrie /coach.'
+        );
+        return;
+      }
+      
       // Anti-cheat: verifică dacă a bifat deja azi (între /checkin și butonul Da)
       const existingCheckin = await db.getTodayWorkoutCheckin(profile.id);
       if (existingCheckin) {
@@ -252,7 +277,16 @@ export function initBot() {
     
     // --- DIFFICULTY RATING ---
     if (data.startsWith('difficulty_')) {
-      // ANTI-CHEAT: 3 verificări înainte de a incrementa
+      // ANTI-CHEAT: verificări înainte de a incrementa
+      
+      // 0) Verificare PRE-PROGRAM: programul nu a început calendaristic
+      const calDay = getCalendarProgramDay(profile.program_start_date);
+      if (calDay === null || calDay <= 0) {
+        await bot.sendMessage(chatId,
+          'Programul nu a început încă. Nu ai antrenamente de bifat.'
+        );
+        return;
+      }
       
       // 1) Există deja un workout bifat azi? → block
       const existingCheckin = await db.getTodayWorkoutCheckin(profile.id);
