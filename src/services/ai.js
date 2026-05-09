@@ -37,7 +37,7 @@ DESPRE PROGRAM:
 - Ambele variante urmăresc același obiectiv: reducerea grăsimii subcutanate + îmbunătățirea tonusului
 - Planul alimentar este identic indiferent de varianta de antrenament aleasă
 - Accesul la materiale rămâne disponibil încă 4 săptămâni după terminarea programului
-- DUPĂ Z14: programul de 14 zile e doar inițierea. Sam are pregătit un VIDEO DE TRANZIȚIE de 16 minute care explică ce urmează (alimentație, antrenamente, opțiuni). Pentru întrebări specifice post-program, redirecționează către videoul Sam (trimis automat la Day+1) sau către /coach.
+- DUPĂ Z14: programul de 14 zile s-a încheiat. Pentru întrebări specifice post-program, redirecționează către /coach (Sam decide pașii următori personal pentru fiecare client).
 
 STRUCTURA SĂPTĂMÂNII (identică în ambele săptămâni):
 - Ziua 1: Antrenament forță (picioare/piept/abdomen sau combinații)
@@ -47,7 +47,7 @@ STRUCTURA SĂPTĂMÂNII (identică în ambele săptămâni):
 - Ziua 5: Antrenament fundamental + grupă deficitară (sau circuit total body la outdoor în Săpt 1)
 - Ziua 6: Volum total (tracțiuni + dips + squat sau combinații)
 - Ziua 7: ZI DE ODIHNĂ
-- Ziua 14: ZI DE ODIHNĂ — programul de 14 zile s-a încheiat (continuitate post-program în videoul de tranziție trimis de Sam)
+- Ziua 14: ZI DE ODIHNĂ — programul de 14 zile s-a încheiat (pentru pași următori clientul scrie /coach, Sam decide personal)
 
 DIFERENȚE ÎNTRE GRUPE:
 - Sală: accent pe masă musculară + definire. Scăderea în greutate e mai lentă (se construiește mușchi simultan)
@@ -281,19 +281,17 @@ USER A BIFAT TOATE 14 ZILELE — programul de inițiere s-a încheiat cu succes.
 
 REGULĂ ABSOLUTĂ pentru această stare:
 
-Pentru ORICE întrebare despre alimentație post-program, antrenamente continuare, plan menținere, ce mănâncă de acum, câte antrenamente face săptămânal, calorii, macronutrienți specifici post-program, lean bulk, recompoziție, Forge, "ce urmează?", "cum continui?", sau orice variantă similară:
+Pentru ORICE întrebare despre alimentație post-program, antrenamente continuare, plan menținere, ce mănâncă de acum, câte antrenamente face săptămânal, calorii, macronutrienți specifici post-program, lean bulk, recompoziție, "ce urmează?", "cum continui?", sau orice variantă similară:
 
 Răspunde EXACT și DOAR atât (fără să adaugi nimic):
 
-"Felicitări că ai dus programul la capăt. Pentru toți pașii care urmează — alimentație, antrenamente, opțiuni de continuare — Sam ți-a pregătit un video special. Scrie /coach și el ți-l trimite imediat."
+"Felicitări că ai dus programul la capăt. Pentru orice întrebare despre ce urmează (alimentație, antrenamente, opțiuni de continuare), scrie /coach și Sam îți răspunde direct."
 
 INTERZIS ABSOLUT:
 - Cifre concrete (kcal/săpt, g/kg, repetări, serii post-program)
 - Nume de protocoale (lean bulk, recompoziție continuă, deficit blând, etc.)
 - Structuri de antrenament post-program (Full Body, PPL, frecvență săptămânală)
-- Mini-rezumate ale conținutului videoului
 - Principii post-program de orice fel (chiar dacă le găsești în system prompt)
-- Promisiuni "videoul s-a trimis automat" sau "verifică emailul"
 - Invenții despre Sam (mii de clienți, ani experiență, diplome)
 
 Pentru întrebări despre cele 14 zile deja terminate (ce a făcut, exerciții din program, rețete folosite, principii învățate în curs) — răspunde NORMAL pe baza programului.`;
@@ -377,18 +375,6 @@ REGULĂ STRICTĂ: când vorbești despre "ziua de azi" sau o zi specifică din c
     console.error('AI Chat error:', error);
     return 'Scuze, am o problemă tehnică momentan. Încearcă din nou în câteva secunde sau scrie /coach pentru a contacta antrenorul direct.';
   }
-}
-
-// ============================================
-// AI WEEKLY REVIEW
-// ============================================
-// DEZACTIVAT pentru MVP — prompt-ul producea halucinații (sfaturi inventate,
-// promisiuni de funcții inexistente — "loghează mese", "X mese logate").
-// Pentru primii 10 clienți, Sam trimite mesaj manual personalizat duminică seara.
-// Reactivat după validare MVP cu prompt strict, doar fapte fără sfaturi.
-
-export async function generateWeeklyReview(profile, stats) {
-  return null;
 }
 
 // ============================================
