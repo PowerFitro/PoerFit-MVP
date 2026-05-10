@@ -50,6 +50,28 @@ export async function updateProfile(userId, updates) {
   if (error) throw error;
   return data;
 }
+// ============================================
+// PENDING WORKOUT DAY — sursa de adevăr la bifare
+// ============================================
+
+// Setează ziua (1-14) pe care userul urmează să o bifeze.
+// Apelată în 4 puncte din telegram.js: la trimiterea oricărui buton de bifare
+// (sendMorningCheckin recovery + normal, morning_ready callback, /checkin manual).
+// Citită în handler-ul difficulty_* ca singura sursă de adevăr pentru program_day.
+// Reset la NULL se face ATOMIC în updateProfile (același round-trip cu current_day).
+export async function setPendingWorkoutDay(userId, day) {
+  const { error } = await supabase
+    .from('user_profiles')
+    .update({ pending_workout_day: day })
+    .eq('id', userId);
+  
+  if (error) {
+    console.error('setPendingWorkoutDay error pentru user', userId, ':', error);
+    return false;
+  }
+  return true;
+}
+
 
 export async function getAllActiveProfiles() {
   const { data, error } = await supabase
