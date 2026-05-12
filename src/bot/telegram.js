@@ -11,17 +11,24 @@ export function initBot() {
   // ============================================
   // COMMAND: /start — Link Telegram to profile
   // ============================================
+  // FLOW: user completează onboarding pe start.powerfitro.com → backend returnează
+  // deep link cu payload = profile.id (UUID). User apasă buton → Telegram → "Start"
+  // → handler primește /start cu param = UUID.
+  //
+  // IMPORTANT: NU folosim email ca payload — caracterele speciale (`.`, `@` encoded
+  // ca `%40`) nu trec validarea Telegram (doar A-Z, a-z, 0-9, _, - sunt permise).
+  // Cu email encoded, Telegram client refuză payload-ul și trimite /start gol.
   bot.onText(/\/start(.*)/, async (msg, match) => {
     const chatId = msg.chat.id;
     const userId = msg.from.id;
-    const param = match[1]?.trim(); // Parameter from deep link (email encoded)
+    const param = match[1]?.trim(); // Payload din deep link = profile.id (UUID)
     
     console.log('[START] Received /start from userId:', userId, 'param:', JSON.stringify(param));
     
     try {
-      // Check if already linked
+      // 1. Verifică dacă utilizatorul Telegram este deja conectat la un profil
       let profile = await db.getProfileByTelegramId(userId);
-      console.log('[START] Existing profile:', profile ? profile.email : 'none');
+      console.log('[START] Existing profile by telegram_user_id:', profile ? profile.email : 'none');
       
       if (profile) {
         await bot.sendMessage(chatId, 
@@ -30,12 +37,26 @@ export function initBot() {
         return;
       }
       
-      // Try to link via email parameter from onboarding
-      if (param) {
-        const email = decodeURIComponent(param);
-        profile = await db.getProfileByEmail(email);
+      // 2. Încearcă linking via UUID din deep link (onboarding -> Telegram)
+      // Validăm format UUID v4 strict (8-4-4-4-12 hex) ca să evităm query-uri inutile
+      // pe text random trimis de useri (ex: /start salut)
+      const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      
+      if (param && UUID_REGEX.test(param)) {
+        profile = await db.getProfileById(param);
+        console.log('[START] Profile lookup by id:', profile ? profile.email : 'not found');
         
         if (profile) {
+          // Edge case: profilul are deja alt telegram_user_id (cineva reutilizează link)
+          if (profile.telegram_user_id && profile.telegram_user_id !== userId) {
+            console.warn('[START] Profile already linked to different telegram user:', 
+              profile.telegram_user_id, '!=', userId);
+            await bot.sendMessage(chatId,
+              `Acest profil este deja conectat la alt cont Telegram.\n\nDacă e o greșeală, scrie /coach și te ajut.`
+            );
+            return;
+          }
+          
           await db.updateProfile(profile.id, {
             telegram_user_id: userId,
             telegram_chat_id: chatId,
@@ -48,13 +69,13 @@ export function initBot() {
         }
       }
       
-      // No profile found
+      // 3. Fallback: user fără param valid sau profil negăsit
       await bot.sendMessage(chatId,
-        `Salut! 👋\n\nSunt Asistentul PowerFit.\n\nPentru a te conecta, trebuie mai întâi să completezi profilul pe:\n🔗 start.powerfitro.com\n\nDupă ce completezi formularul, revino aici și scrie /start`
+        `Salut! 👋\n\nSunt Asistentul PowerFit.\n\nPentru a te conecta, trebuie mai întâi să completezi profilul pe:\n🔗 start.powerfitro.com\n\nDupă ce completezi formularul, revino aici și apasă butonul de conectare.`
       );
     } catch (error) {
       console.error('Start command error:', error);
-      await bot.sendMessage(chatId, 'A apărut o eroare. Te rog să încerci din nou.');
+      await bot.sendMessage(chatId, 'A apărut o eroare. Te rog să încerci din nou în câteva momente.');
     }
   });
 
