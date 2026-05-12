@@ -40,6 +40,18 @@ export async function getProfileByEmail(email) {
   return data;
 }
 
+// Lookup profil după id (UUID). Folosit la onboarding -> Telegram linking
+// prin deep link payload (?start=<profile.id>).
+export async function getProfileById(id) {
+  const { data, error } = await supabase
+    .from('user_profiles')
+    .select('*')
+    .eq('id', id)
+    .single();
+  if (error && error.code !== 'PGRST116') throw error;
+  return data;
+}
+
 export async function updateProfile(userId, updates) {
   const { data, error } = await supabase
     .from('user_profiles')
