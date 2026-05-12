@@ -199,6 +199,11 @@ export function initBot() {
       return;
     }
     
+    // PENDING WORKOUT DAY: setăm ziua pe care urmează să o bifeze
+    // Logică: dacă suntem în calendar 1-14 → calendarDay; altfel (recuperare) → bifate+1
+    const pendingDay = (calendarDay >= 1 && calendarDay <= 14) ? calendarDay : (profile.current_day || 0) + 1;
+    await db.setPendingWorkoutDay(profile.id, pendingDay);
+    
     await bot.sendMessage(chatId, 
       `Ai terminat antrenamentul de azi? 💪`,
       {
@@ -320,7 +325,18 @@ export function initBot() {
       
       // Calculez ziua calendaristică reală (sursa de adevăr — nu current_day + 1)
       const calendarDay = getCalendarProgramDay(profile.program_start_date);
-      const programDay = (calendarDay !== null && calendarDay >= 1 && calendarDay <= 14) ? calendarDay : (profile.current_day || 0) + 1;
+      
+      // PROGRAM_DAY: citim pending_workout_day ca sursa de adevăr.
+      // Setat la momentul trimiterii butonului (4 puncte: morning normal, morning recovery, morning_ready, /checkin).
+      // Fallback la calcul vechi DOAR dacă pending e null (defensive — n-ar trebui să se întâmple în flow normal).
+      let programDay;
+      if (profile.pending_workout_day !== null && profile.pending_workout_day !== undefined && profile.pending_workout_day >= 1 && profile.pending_workout_day <= 14) {
+        programDay = profile.pending_workout_day;
+      } else {
+        // FALLBACK: pending nu e setat (race condition sau user a folosit flow neobișnuit)
+        programDay = (calendarDay !== null && calendarDay >= 1 && calendarDay <= 14) ? calendarDay : (profile.current_day || 0) + 1;
+        console.warn('pending_workout_day NULL pentru user', profile.id, '— fallback la', programDay);
+      }
       
       // current_day reprezintă progresul userului (numărul de zile bifate)
       // Avansează la programDay (ziua calendaristică actuală) după bifare
@@ -338,9 +354,11 @@ export function initBot() {
       });
       
       // Update profile day — programul s-a încheiat dacă userul a bifat 14 antrenamente reale
+      // RESET ATOMIC pending_workout_day la null în același update (un singur round-trip DB)
       const userFinishedAllWorkouts = newDay >= 14;
       await db.updateProfile(profile.id, { 
         current_day: newDay,
+        pending_workout_day: null,
         ...(userFinishedAllWorkouts ? { program_completed: true, program_completed_date: new Date().toISOString() } : {})
       });
       
@@ -416,9 +434,13 @@ export function initBot() {
     
     // --- MORNING CHECK-IN RESPONSES ---
     if (data === 'morning_ready') {
-      const dayInfo = getDayInfo(profile.current_day + 1);
+      // PENDING WORKOUT DAY: ziua pe care urmează să o bifeze e current_day + 1 (flow standard)
+      const expectedDay = (profile.current_day || 0) + 1;
+      await db.setPendingWorkoutDay(profile.id, expectedDay);
+      
+      const dayInfo = getDayInfo(expectedDay);
       await bot.sendMessage(chatId,
-        `Hai să facem treabă.\n\nZiua ${profile.current_day + 1}: ${dayInfo}\n\nDeschide lecția în PowerFit și urmează instrucțiunile.\n\nDupă antrenament, scrie /checkin sau apasă butonul de mai jos.`,
+        `Hai să facem treabă.\n\nZiua ${expectedDay}: ${dayInfo}\n\nDeschide lecția în PowerFit și urmează instrucțiunile.\n\nDupă antrenament, scrie /checkin sau apasă butonul de mai jos.`,
         { 
           reply_markup: {
             inline_keyboard: [[
@@ -471,22 +493,38 @@ export function initBot() {
       // Get AI response
       const response = await ai.getChatResponse(msg.text, history, profile);
       
-      // Save AI response
+      // Save assistant message
       await db.saveMessage(profile.id, 'assistant', response);
       
+      // Send response
       await bot.sendMessage(chatId, response);
+      
+      // Check if escalation needed (heuristic)
+      const escalationKeywords = ['durere puternică', 'accidentat', 'ranit', 'urgență', 'medical'];
+      if (escalationKeywords.some(kw => msg.text.toLowerCase().includes(kw))) {
+        const adminChatId = process.env.TELEGRAM_ADMIN_CHAT_ID;
+        if (adminChatId) {
+          await bot.sendMessage(adminChatId,
+            `⚠️ POSIBILĂ ESCALADARE\n\n` +
+            `Client: ${profile.full_name}\n` +
+            `Ziua: ${profile.current_day}/14\n` +
+            `Mesaj: "${msg.text}"\n\n` +
+            `Verifică conversația și intervino dacă e cazul.`
+          );
+        }
+      }
     } catch (error) {
-      console.error('Chat error:', error);
-      await bot.sendMessage(chatId, 'Scuze, am o problemă momentan. Încearcă din nou sau scrie /coach pentru antrenor.');
+      console.error('Message handler error:', error);
+      await bot.sendMessage(chatId, 'Am întâmpinat o problemă. Încearcă din nou peste câteva momente.');
     }
   });
 
-  console.log('🤖 Telegram Bot initialized');
+  console.log('✅ Bot Telegram inițializat (polling mode)');
   return bot;
 }
 
 // ============================================
-// SEND FUNCTIONS (used by cron jobs)
+// AUTOMATED MESSAGES (called by cron)
 // ============================================
 
 export async function sendMorningCheckin(profile) {
@@ -514,6 +552,9 @@ export async function sendMorningCheckin(profile) {
       'Tu mai ai ' + ramase + ' ' + (ramase === 1 ? 'antrenament' : 'antrenamente') + ' de făcut pentru a finaliza programul de bază.\n\n' +
       'Următorul ar fi Ziua ' + nextLogicDay + ' — ' + nextDayInfo + '\n\n' +
       'Te încurajez să termini ce-ai început. După ce bifezi toate 14, primești instrucțiunile pentru ce urmează.';
+    
+    // PENDING WORKOUT DAY: setăm ziua pe care urmează să o recupereze (înainte de a trimite butonul)
+    await db.setPendingWorkoutDay(profile.id, nextLogicDay);
     
     await bot.sendMessage(profile.telegram_chat_id, message, {
       reply_markup: {
@@ -575,6 +616,12 @@ export async function sendMorningCheckin(profile) {
   const keyboard = isRestDay ? [] : [[
     { text: 'Am terminat antrenamentul', callback_data: 'workout_yes' }
   ]];
+  
+  // PENDING WORKOUT DAY: setăm DOAR pentru zilele cu buton (antrenament + cardio)
+  // Pentru zilele de odihnă NU setăm — userul nu are ce bifa
+  if (!isRestDay) {
+    await db.setPendingWorkoutDay(profile.id, calendarDay);
+  }
   
   await bot.sendMessage(profile.telegram_chat_id, message, 
     keyboard.length > 0 ? { reply_markup: { inline_keyboard: keyboard } } : {}
