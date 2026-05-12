@@ -13,6 +13,15 @@ function getNextMonday() {
   return nextMonday.toISOString().split('T')[0];
 }
 
+// Construiește deep link Telegram cu profile.id ca payload (?start=<uuid>).
+// IMPORTANT: NU folosim email — caracterele speciale (`.`, `@` encoded ca `%40`)
+// nu sunt permise de Telegram în payload (doar A-Z, a-z, 0-9, _, -).
+// Cu email encoded, Telegram client refuză payload-ul și trimite /start gol.
+function buildTelegramLink(profileId) {
+  const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'PowerFitCoachBot';
+  return `https://t.me/${botUsername}?start=${profileId}`;
+}
+
 export async function registerRoutes(app) {
   
   // ============================================
@@ -41,7 +50,17 @@ export async function registerRoutes(app) {
           program_start_date: getNextMonday(),
           program_type: data.equipment === 'gym' ? 'gym_week1' : 'outdoor_week1'
         });
-        return reply.send({ success: true, profile: updated, isUpdate: true });
+        
+        // Generăm deep link și pentru update (user reia formularul fără să se fi conectat încă pe Telegram)
+        const telegramLink = buildTelegramLink(updated.id);
+        
+        return reply.send({ 
+          success: true, 
+          profile: updated, 
+          isUpdate: true,
+          telegramLink,
+          recommendedProgram: data.equipment === 'gym' ? 'Antrenament la sală' : 'Antrenament în aer liber'
+        });
       }
       
       // Calculate daily calorie target (simplified Mifflin-St Jeor)
@@ -69,9 +88,8 @@ export async function registerRoutes(app) {
         program_type: data.equipment === 'gym' ? 'gym_week1' : 'outdoor_week1'
       });
       
-      // Generate Telegram deep link
-      const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'PowerFitCoachBot';
-      const telegramLink = `https://t.me/${botUsername}?start=${encodeURIComponent(data.email)}`;
+      // Generate Telegram deep link (payload = profile.id, UUID safe pentru ?start=)
+      const telegramLink = buildTelegramLink(profile.id);
       
       return reply.send({ 
         success: true, 
