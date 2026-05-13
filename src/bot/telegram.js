@@ -492,9 +492,22 @@ export function initBot() {
       return;
     }
     
+    // Normalizare input: lowercase + fără diacritice
+    // Folosit pentru matching pe coachKeywords + escalationKeywords (intent detection).
+    // Userul poate scrie cu sau fără diacritice — keyword-urile sunt scrise fără.
+    const normalizedText = stripDiacritics(msg.text);
+    
     // Check if user wants to talk to coach
-    const coachKeywords = ['vreau antrenorul', 'vreau sa vorbesc cu', 'antrenor real', 'om real', 'persoana reala'];
-    if (coachKeywords.some(kw => msg.text.toLowerCase().includes(kw))) {
+    const coachKeywords = [
+      'vreau antrenorul',
+      'vreau sa vorbesc cu sam',
+      'vreau sa vorbesc cu un om',
+      'cu sam direct',
+      'antrenor real',
+      'om real',
+      'persoana reala'
+    ];
+    if (coachKeywords.some(kw => normalizedText.includes(kw))) {
       await bot.sendMessage(chatId,
         'Înțeleg că vrei să vorbești direct cu antrenorul. Scrie /coach și îl contactez imediat! 📩'
       );
@@ -521,8 +534,17 @@ export function initBot() {
       await bot.sendMessage(chatId, response);
       
       // Check if escalation needed (heuristic)
-      const escalationKeywords = ['durere puternică', 'accidentat', 'ranit', 'urgență', 'medical'];
-      if (escalationKeywords.some(kw => msg.text.toLowerCase().includes(kw))) {
+      const escalationKeywords = [
+        'durere puternica',
+        'accidentat',
+        'ranit',
+        'urgenta',
+        'medical',
+        'lesin',
+        'am cazut',
+        'nu pot misca'
+      ];
+      if (escalationKeywords.some(kw => normalizedText.includes(kw))) {
         const adminChatId = process.env.TELEGRAM_ADMIN_CHAT_ID;
         if (adminChatId) {
           await bot.sendMessage(adminChatId,
@@ -820,6 +842,18 @@ export async function sendPreProgramMessage(profile, startDate) {
 
 function getCoachName() {
   return process.env.COACH_NAME || 'Antrenorul';
+}
+
+// ============================================
+// TEXT NORMALIZATION — diacritice tolerante
+// ============================================
+// Convertim input-ul userului la lowercase + fără diacritice ca să facem
+// matching pe intent (escaladare, cerere de coach uman, urgență medicală)
+// indiferent dacă userul scrie "ranit" sau "rănit", "urgenta" sau "urgență".
+// CONVENȚIE: keyword-urile în array-urile coachKeywords/escalationKeywords
+// se scriu MEREU fără diacritice. Userul poate scrie cu sau fără.
+function stripDiacritics(s) {
+  return s.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
 }
 
 export { bot };
