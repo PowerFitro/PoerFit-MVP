@@ -405,30 +405,3 @@ Nivel risc: ${riskLevel}`
     return `Hei ${profile.full_name}, am observat că nu ai fost activ recent. Totul ok? Sunt aici dacă ai nevoie. 💪`;
   }
 }
-
-export async function generateWelcomeMessage(profile) {
-  const programName = profile.equipment === 'gym' ? 'Antrenament la sală' : 'Antrenament în aer liber';
-  const goalText = profile.goal === 'fat_loss' ? 'pierdere grăsime' : profile.goal === 'toning' ? 'tonifiere' : 'creștere masă musculară';
-
-  try {
-    const response = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 200,
-      system: 'Ești Asistentul PowerFit, instruit de Sam. Scrie un mesaj de bun venit cald și energic în română. Maxim 4-5 propoziții. Include informații specifice din profilul clientului. NU folosi formatare Markdown (fără #, *, _, **, backtick, sau orice alt simbol de formatare). Mesajul se trimite ca text simplu pe Telegram. Dacă vrei accent pe un cuvânt, folosește MAJUSCULE sau ghilimele românești „".',
-      messages: [{
-        role: 'user',
-        content: `Client nou:
-Nume: ${profile.full_name}
-Obiectiv: ${goalText}
-Program selectat: ${programName}
-Nivel experiență: ${profile.experience_level}
-Zile disponibile: ${profile.available_days}/săptămână
-
-Menționează: programul selectat, că mâine dimineață la 8:00 primește primul reminder, și că poate scrie oricând pentru întrebări.`
-      }]
-    });
-    return response.content[0].text;
-  } catch (error) {
-    return `Bine ai venit în PowerFit, ${profile.full_name}! 💪\n\nȚi-am pregătit programul de ${programName} bazat pe obiectivul tău de ${goalText}.\n\nMâine dimineață la 8:00 primești primul reminder. Între timp, poți să-mi scrii oricând dacă ai întrebări.\n\nHai să începem! 🔥`;
-  }
-}
