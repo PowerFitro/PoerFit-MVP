@@ -715,20 +715,20 @@ export async function sendAntiChurnMessage(profile, riskLevel, daysSince) {
 
 function getDayInfo(dayNumber) {
   const schedule = {
-    1: 'Picioare, Piept si Abdomen',
-    2: 'Spate, Umeri, Abdomen si Lombari',
-    3: 'Brate, Picioare si Gambe',
-    4: 'Cardio HIIT (sau zi de pauza daca esti obosit)',
-    5: 'Exercitii fundamentale + Grup muscular deficitar',
-    6: 'Volum total (Tractiuni 50 + Dips 80 + Squat 100)',
-    7: 'Zi de odihna',
-    8: 'Picioare (baza), Brate, Abdomen',
-    9: 'Spate, Piept',
-    10: 'Umeri, Picioare, Gambe si Abdomen',
+    1: 'Picioare, piept și abdomen',
+    2: 'Spate, umeri, abdomen și lombari',
+    3: 'Brațe, picioare și gambe',
+    4: 'Cardio HIIT (sau zi de pauză dacă ești obosit)',
+    5: 'Exerciții fundamentale + grup muscular deficitar',
+    6: 'Volum total (tracțiuni 50 + dips 80 + squat 100)',
+    7: 'Zi de odihnă',
+    8: 'Picioare (bază), brațe, abdomen',
+    9: 'Spate, piept',
+    10: 'Umeri, picioare, gambe și abdomen',
     11: 'Cardio intervale',
-    12: 'Exercitii fundamentale + Grup muscular deficitar',
-    13: 'Volum total (Tractiuni 60 + Dips 80 + Squat 100)',
-    14: 'Zi de odihna - PROGRAMUL S-A INCHEIAT!',
+    12: 'Exerciții fundamentale + grup muscular deficitar',
+    13: 'Volum total (tracțiuni 60 + dips 80 + squat 100)',
+    14: 'Zi de odihnă',
   };
   return schedule[dayNumber] || 'Antrenament';
 }
@@ -781,31 +781,31 @@ export async function sendPreProgramMessage(profile, startDate) {
   let message = '';
   
   if (daysUntilStart > 5) {
-    message = 'Buna dimineata, ' + profile.full_name + '! \u{1F4AA}\n\nProgramul tău de antrenament începe luni. Până atunci, ai câteva lucruri importante de parcurs:\n\n' +
-      '\u{1F4DA} Parcurge secțiunea "Informatii utile" - acolo găsești strategia completă de alimentație\n' +
+    message = 'Bună dimineața, ' + profile.full_name + '! \u{1F4AA}\n\nProgramul tău de antrenament începe luni. Până atunci, ai câteva lucruri importante de parcurs:\n\n' +
+      '\u{1F4DA} Parcurge secțiunea "Informații utile" - acolo găsești strategia completă de alimentație\n' +
       '\u{1F9EE} Calculează-ți macronutrienții — folosește calculatorul din curs sau scrie-mi aici sexul, greutatea și procentul de grăsime\n' +
       '\u{1F4F1} Descarcă o aplicație de tracking nutrițional\n\nAcești pași sunt esențiali înainte de prima zi de antrenament.';
   } else if (daysUntilStart > 3) {
-    message = 'Buna dimineata, ' + profile.full_name + '! \u{1F4AA}\n\n' +
+    message = 'Bună dimineața, ' + profile.full_name + '! \u{1F4AA}\n\n' +
       'Mai sunt ' + daysUntilStart + ' zile până la startul programului.\n\n' +
       'Ai calculat macronutrienții? Dacă nu, scrie-mi aici datele tale și te ajut instant.\n' +
       'Fă antrenamentul pregătitor azi — te va ajuta să intri în ritm luni.\n' +
       'Verifică lista de cumpărături din secțiunea Alimentație.';
   } else if (daysUntilStart >= 2) {
-    message = 'Buna dimineata, ' + profile.full_name + '! \u{1F4AA}\n\n' +
+    message = 'Bună dimineața, ' + profile.full_name + '! \u{1F4AA}\n\n' +
       'Mai sunt ' + daysUntilStart + ' zile! Fă antrenamentul pregătitor dacă nu l-ai făcut încă.\n\n' +
       'Verifică că ai totul pregătit:\n' +
       '- Macronutrienții calculați\n' +
       '- Ingredientele cumpărate\n' +
       '- Aplicația de tracking instalată\n\nLuni începem la intensitate maximă!';
   } else if (daysUntilStart === 1) {
-    message = 'Buna dimineata, ' + profile.full_name + '! \u{1F525}\n\n' +
+    message = 'Bună dimineața, ' + profile.full_name + '! \u{1F525}\n\n' +
       'Mâine începe programul! Ziua 1: antrenament complet + plan alimentar.\n\n' +
       'Diseară se deblochează Săptămâna 1.\n' +
       'Mâine dimineață la 8:00 primești primul reminder cu antrenamentul zilei.\n\n' +
       'Ești pregătit? \u{1F4AA}';
   } else {
-    message = 'Buna dimineata, ' + profile.full_name + '! \u{1F525}\n\n' +
+    message = 'Bună dimineața, ' + profile.full_name + '! \u{1F525}\n\n' +
       'Programul tău începe luni. Parcurge materialele din curs și pregătește-te!\n\n' +
       'Scrie-mi dacă ai întrebări.';
   }
