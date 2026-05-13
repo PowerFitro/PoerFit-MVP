@@ -63,7 +63,7 @@ export function initBot() {
             telegram_username: msg.from.username || null
           });
           
-          const welcome = await ai.generateWelcomeMessage(profile);
+          const welcome = buildWelcomeMessage(profile);
           await bot.sendMessage(chatId, welcome);
           return;
         }
@@ -731,6 +731,39 @@ function getDayInfo(dayNumber) {
     14: 'Zi de odihna - PROGRAMUL S-A INCHEIAT!',
   };
   return schedule[dayNumber] || 'Antrenament';
+}
+
+// ============================================
+// WELCOME MESSAGE — Hardcoded, fără AI
+// ============================================
+// Decizie: zero AI în welcome ca să eliminăm risc halucinație și clișee
+// motivaționale. Pattern identic cu sendPreProgramMessage — text fix +
+// interpolare 2 variabile (equipment + goal). Aliniat cu D5 (mesaje
+// motivaționale AI dezactivate) și D11 (plain text peste tot).
+function buildWelcomeMessage(profile) {
+  // Echipament: 'gym' = sală, orice altceva (outdoor/home/park) = acasă/parc
+  const programLabel = profile.equipment === 'gym'
+    ? 'programul de antrenament la sală'
+    : 'programul de antrenament acasă sau în parc';
+
+  // Goal labels — aliniate cu formularul de onboarding
+  // (Pierdere grăsime / Tonifiere / Masă musculară)
+  const goalLabels = {
+    fat_loss: 'pierdere grăsime',
+    toning: 'tonifiere',
+    muscle_gain: 'masă musculară'
+  };
+  const goalLabel = goalLabels[profile.goal] || 'obiectivul tău';
+
+  return `Bună, ${profile.full_name}. Bine ai venit în PowerFit.
+
+Te-am înregistrat pentru ${programLabel}, cu obiectiv ${goalLabel}.
+
+Programul de antrenament începe luni. Până atunci ești în săptămâna de pregătire — primești zilnic mesaje cu pașii importanți: calculul macronutrienților, lista de cumpărături și antrenamentul pregătitor. Parcurge-le, sunt esențiale pentru prima săptămână.
+
+Pentru orice întrebare legată de program, antrenamente sau nutriție, scrie-mi direct aici — îți răspund non-stop.
+
+Pentru lucruri care necesită discuție cu Sam personal, folosește /coach.`;
 }
 
 
