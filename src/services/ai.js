@@ -414,7 +414,7 @@ export async function generateWelcomeMessage(profile) {
     const response = await client.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 200,
-      system: 'Ești Asistentul PowerFit, instruit de Sam. Scrie un mesaj de bun venit cald și energic în română. Maxim 4-5 propoziții. Include informații specifice din profilul clientului.',
+      system: 'Ești Asistentul PowerFit, instruit de Sam. Scrie un mesaj de bun venit cald și energic în română. Maxim 4-5 propoziții. Include informații specifice din profilul clientului. NU folosi formatare Markdown (fără #, *, _, **, backtick, sau orice alt simbol de formatare). Mesajul se trimite ca text simplu pe Telegram. Dacă vrei accent pe un cuvânt, folosește MAJUSCULE sau ghilimele românești „".',
       messages: [{
         role: 'user',
         content: `Client nou:
