@@ -31,9 +31,8 @@ export function initBot() {
       console.log('[START] Existing profile by telegram_user_id:', profile ? profile.email : 'none');
       
       if (profile) {
-        await bot.sendMessage(chatId, 
-          `Bine ai revenit, ${profile.full_name}!\n\nEști la Ziua ${profile.current_day}/14 din program.\n\nScrie-mi oricând dacă ai întrebări despre antrenament sau nutriție.`
-        );
+        const message = buildReturningUserMessage(profile);
+        await bot.sendMessage(chatId, message);
         return;
       }
       
@@ -786,6 +785,87 @@ Programul de antrenament începe luni. Până atunci ești în săptămâna de p
 Pentru orice întrebare legată de program, antrenamente sau nutriție, scrie-mi direct aici — îți răspund non-stop.
 
 Pentru lucruri care necesită discuție cu Sam personal, folosește /coach.`;
+}
+
+
+
+// ============================================
+// RETURNING USER MESSAGE — /start pentru profil deja conectat
+// ============================================
+// Diferentiat pe 4 cazuri:
+//   A) Terminat (calendar > 14 + bifate >= 14)        → felicitare + redirect /coach
+//   B) Recuperare post-calendar (calendar > 14 + bifate < 14) → cate antrenamente mai are
+//   C) In program (1 <= calendar <= 14)              → la zi sau in urma, cu detalii
+//   D) Pre-program (calendar <= 0 sau null)          → cate zile pana la start
+// Pattern de referinta: sendMorningCheckin (acelasi tratament al cazurilor)
+function buildReturningUserMessage(profile) {
+  const calendarDay = getCalendarProgramDay(profile.program_start_date);
+  const bifate = profile.current_day || 0;
+  const name = profile.full_name;
+  
+  // CAZ D — Pre-program (programul nu a inceput inca)
+  if (calendarDay === null || calendarDay <= 0) {
+    if (!profile.program_start_date) {
+      return 'Bine ai revenit, ' + name + '.\n\nProgramul tău încă nu are dată de start. Scrie /coach și clarificăm imediat.';
+    }
+    const today = new Date();
+    const start = new Date(profile.program_start_date + 'T00:00:00');
+    const daysUntilStart = Math.ceil((start - today) / (1000 * 60 * 60 * 24));
+    
+    if (daysUntilStart === 1) {
+      return 'Bine ai revenit, ' + name + '.\n\n' +
+        'Programul începe mâine. Ziua 1: antrenament complet + plan alimentar.\n\n' +
+        'Mâine dimineață la 8:00 primești primul mesaj cu antrenamentul zilei. Scrie-mi dacă mai ai întrebări înainte.';
+    }
+    
+    const zileTxt = daysUntilStart === 1 ? 'zi' : 'zile';
+    return 'Bine ai revenit, ' + name + '.\n\n' +
+      'Programul tău începe în ' + daysUntilStart + ' ' + zileTxt + '. Ești în săptămâna de pregătire.\n\n' +
+      'Folosește timpul pentru macronutrienți, lista de cumpărături și antrenamentul pregătitor. În secțiunea Informații utile ai strategia completă.\n\n' +
+      'Scrie-mi dacă ai întrebări.';
+  }
+  
+  // CAZ A — Terminat real (calendar a trecut Z14 + a bifat toate 14)
+  if (calendarDay > 14 && bifate >= 14) {
+    return 'Bine ai revenit, ' + name + '.\n\n' +
+      'Ai dus la capăt programul de 14 zile. Felicitări.\n\n' +
+      'Scrie /coach când vrei să discutăm despre pașii următori — menținere, continuare, ajustări. Sunt aici pentru orice întrebare despre antrenament sau nutriție.';
+  }
+  
+  // CAZ B — Recuperare post-calendar (calendar a trecut Z14 + bifate < 14)
+  if (calendarDay > 14 && bifate < 14) {
+    const ramase = 14 - bifate;
+    const daysOverdue = calendarDay - 14;
+    const nextLogicDay = bifate + 1;
+    const nextDayInfo = getDayInfo(nextLogicDay);
+    const isRestNext = nextLogicDay === 7 || nextLogicDay === 14;
+    const nextLabel = isRestNext ? 'Următoarea zi' : 'Următorul antrenament';
+    
+    return 'Bine ai revenit, ' + name + '.\n\n' +
+      'Programul calendar de 14 zile s-a încheiat acum ' + daysOverdue + ' ' + (daysOverdue === 1 ? 'zi' : 'zile') + '. Ai bifat ' + bifate + ' din 14 antrenamente — mai sunt ' + ramase + ' de recuperat.\n\n' +
+      nextLabel + ': Ziua ' + nextLogicDay + ' — ' + nextDayInfo + '.\n\n' +
+      'Scrie-mi când ești pregătit să-l faci.';
+  }
+  
+  // CAZ C — In program normal (1 <= calendar <= 14)
+  // Sub-caz C1: in urma (bifate < calendarDay)
+  if (bifate < calendarDay) {
+    const decalaj = calendarDay - bifate;
+    const nextLogicDay = bifate + 1;
+    const nextDayInfo = getDayInfo(nextLogicDay);
+    const isRestNext = nextLogicDay === 7 || nextLogicDay === 14;
+    const nextLabel = isRestNext ? 'Următoarea zi' : 'Următorul antrenament';
+    
+    return 'Bine ai revenit, ' + name + '.\n\n' +
+      'Calendarul e la Ziua ' + calendarDay + '/14, tu ai bifat ' + bifate + ' antrenamente. Ești cu ' + decalaj + ' ' + (decalaj === 1 ? 'zi' : 'zile') + ' în urmă — recuperabil.\n\n' +
+      nextLabel + ': Ziua ' + nextLogicDay + ' — ' + nextDayInfo + '.\n\n' +
+      'Scrie-mi dacă ai întrebări.';
+  }
+  
+  // Sub-caz C2: la zi (bifate >= calendarDay)
+  return 'Bine ai revenit, ' + name + '.\n\n' +
+    'Ești la Ziua ' + bifate + '/14, la zi cu programul.\n\n' +
+    'Scrie-mi oricând ai întrebări despre antrenament sau nutriție.';
 }
 
 
