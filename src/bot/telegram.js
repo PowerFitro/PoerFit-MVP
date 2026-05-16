@@ -153,18 +153,7 @@ export function initBot() {
     }
     
     const stats = await db.getCheckinStats(profile.id);
-    const bifate = profile.current_day || 0;
-    const ramase = Math.max(0, 14 - bifate);
-    const avgDiff = stats.avgDifficulty ? stats.avgDifficulty.toFixed(1) : '—';
-    
-    let message = `Ești la Ziua ${bifate}/14, ai bifat ${stats.totalWorkouts} antrenamente.\n`;
-    if (ramase > 0) {
-      message += `Mai ai ${ramase} ${ramase === 1 ? 'zi' : 'zile'} până la final.\n\n`;
-    } else {
-      message += `Programul s-a încheiat. Felicitări!\n\n`;
-    }
-    message += `Dificultate medie: ${avgDiff}/5\n\nȚine-o tot așa.`;
-    
+    const message = buildStatusMessage(profile, stats);
     await bot.sendMessage(chatId, message);
   });
 
@@ -866,6 +855,74 @@ function buildReturningUserMessage(profile) {
   return 'Bine ai revenit, ' + name + '.\n\n' +
     'Ești la Ziua ' + bifate + '/14, la zi cu programul.\n\n' +
     'Scrie-mi oricând ai întrebări despre antrenament sau nutriție.';
+}
+
+
+
+// ============================================
+// STATUS MESSAGE — /status pentru profil deja conectat
+// ============================================
+// Diferentiat pe aceleasi 4 cazuri ca buildReturningUserMessage,
+// dar cu stats reale (numar antrenamente, dificultate medie).
+// In pre-program nu afisam stats (n-au sens, sunt toate zero).
+function buildStatusMessage(profile, stats) {
+  const calendarDay = getCalendarProgramDay(profile.program_start_date);
+  const bifate = profile.current_day || 0;
+  const avgDiff = stats.avgDifficulty ? stats.avgDifficulty.toFixed(1) : null;
+  
+  // CAZ D — Pre-program: zero stats relevante
+  if (calendarDay === null || calendarDay <= 0) {
+    if (!profile.program_start_date) {
+      return 'Programul tău încă nu are dată de start. Scrie /coach și clarificăm imediat.';
+    }
+    const today = new Date();
+    const start = new Date(profile.program_start_date + 'T00:00:00');
+    const daysUntilStart = Math.ceil((start - today) / (1000 * 60 * 60 * 24));
+    
+    if (daysUntilStart === 1) {
+      return 'Programul începe mâine. Ești în săptămâna de pregătire — antrenamentele se bifează din Ziua 1.';
+    }
+    const zileTxt = daysUntilStart === 1 ? 'zi' : 'zile';
+    return 'Programul tău începe în ' + daysUntilStart + ' ' + zileTxt + '. Ești în săptămâna de pregătire — antrenamentele se bifează din Ziua 1.';
+  }
+  
+  // CAZ A — Terminat real
+  if (calendarDay > 14 && bifate >= 14) {
+    let msg = 'Ai bifat toate 14 antrenamente. Programul s-a încheiat.\n';
+    if (avgDiff) {
+      msg += '\nDificultate medie: ' + avgDiff + '/5';
+    }
+    return msg;
+  }
+  
+  // CAZ B — Recuperare post-calendar
+  if (calendarDay > 14 && bifate < 14) {
+    const ramase = 14 - bifate;
+    const daysOverdue = calendarDay - 14;
+    let msg = 'Ai bifat ' + bifate + ' din 14 antrenamente. Programul calendar s-a încheiat acum ' + daysOverdue + ' ' + (daysOverdue === 1 ? 'zi' : 'zile') + ' — mai ai ' + ramase + ' de recuperat.\n';
+    if (avgDiff) {
+      msg += '\nDificultate medie: ' + avgDiff + '/5';
+    }
+    return msg;
+  }
+  
+  // CAZ C1 — In program, in urma
+  if (bifate < calendarDay) {
+    const decalaj = calendarDay - bifate;
+    let msg = 'Ziua ' + calendarDay + '/14 calendaristic. Ai bifat ' + bifate + ' antrenamente — cu ' + decalaj + ' ' + (decalaj === 1 ? 'zi' : 'zile') + ' în urmă.\n';
+    if (avgDiff) {
+      msg += '\nDificultate medie: ' + avgDiff + '/5';
+    }
+    return msg;
+  }
+  
+  // CAZ C2 — In program, la zi
+  let msg = 'Ești la Ziua ' + bifate + '/14, la zi cu programul.\n';
+  if (avgDiff) {
+    msg += '\nDificultate medie: ' + avgDiff + '/5';
+  }
+  msg += '\n\nȚine-o tot așa.';
+  return msg;
 }
 
 
