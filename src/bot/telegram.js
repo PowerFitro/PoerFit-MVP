@@ -2,6 +2,7 @@ import TelegramBot from 'node-telegram-bot-api';
 import * as db from '../db/supabase.js';
 import * as ai from '../services/ai.js';
 import { getCalendarProgramDay, getRomaniaDate } from '../utils/helpers.js';
+import { getDayShortLabel } from '../data/program.js';
 
 let bot;
 
@@ -447,7 +448,7 @@ export function initBot() {
       const expectedDay = (profile.current_day || 0) + 1;
       await db.setPendingWorkoutDay(profile.id, expectedDay);
       
-      const dayInfo = getDayInfo(expectedDay);
+      const dayInfo = getDayInfo(expectedDay, profile.equipment);
       await bot.sendMessage(chatId,
         `Hai să facem treabă.\n\nZiua ${expectedDay}: ${dayInfo}\n\nDeschide lecția în PowerFit și urmează instrucțiunile.\n\nDupă antrenament, scrie /checkin sau apasă butonul de mai jos.`,
         { 
@@ -575,7 +576,7 @@ export async function sendMorningCheckin(profile) {
   if (calendarDay > 14 && bifate < 14) {
     const ramase = 14 - bifate;
     const nextLogicDay = bifate + 1;
-    const nextDayInfo = getDayInfo(nextLogicDay);
+    const nextDayInfo = getDayInfo(nextLogicDay, profile.equipment);
     const daysOverdue = calendarDay - 14;
     
     const message = 'Bună dimineața, ' + profile.full_name + '.\n\n' +
@@ -600,7 +601,7 @@ export async function sendMorningCheckin(profile) {
   }
   
   // De aici încolo: calendar e între 1 și 14 (program normal)
-  const dayInfo = getDayInfo(calendarDay);
+  const dayInfo = getDayInfo(calendarDay, profile.equipment);
   const isRestDay = calendarDay === 7 || calendarDay === 14;
   const isCardioDay = calendarDay === 4 || calendarDay === 11;
   
@@ -723,24 +724,21 @@ export async function sendAntiChurnMessage(profile, riskLevel, daysSince) {
 // HELPER FUNCTIONS
 // ============================================
 
-function getDayInfo(dayNumber) {
-  const schedule = {
-    1: 'Picioare, piept și abdomen',
-    2: 'Spate, umeri, abdomen și lombari',
-    3: 'Brațe, picioare și gambe',
-    4: 'Cardio HIIT (sau zi de pauză dacă ești obosit)',
-    5: 'Exerciții fundamentale + grup muscular deficitar',
-    6: 'Volum total (tracțiuni 50 + dips 80 + squat 100)',
-    7: 'Zi de odihnă',
-    8: 'Picioare (bază), brațe, abdomen',
-    9: 'Spate, piept',
-    10: 'Umeri, picioare, gambe și abdomen',
-    11: 'Cardio intervale',
-    12: 'Exerciții fundamentale + grup muscular deficitar',
-    13: 'Volum total (tracțiuni 60 + dips 80 + squat 100)',
-    14: 'Zi de odihnă',
-  };
-  return schedule[dayNumber] || 'Antrenament';
+// Wrapper peste sursa de adevăr (src/data/program.js).
+// Înainte: dicționar hardcodat cu titluri gym, ignora equipment → useri outdoor
+// primeau descrieri de sală în morning checkin normal și recovery (BUG 1+2).
+// Acum: deleagă la getDayShortLabel(dayNumber, equipment) care întoarce titlul
+// corect din PROGRAM[gym|outdoor]. Wrapper-ul există ca punct unic de schimbare
+// în viitor (dacă vrem prefix "Ziua X" sau alt format, modificăm aici, nu în
+// toate call-site-urile).
+function getDayInfo(dayNumber, equipment) {
+  if (equipment !== 'gym' && equipment !== 'outdoor') {
+    // Defense-in-depth: onboarding-ul garantează equipment populat, dar dacă
+    // ajunge null/undefined (DB inconsistent, profil corupt), logăm ca să
+    // prindem în Railway. getDayShortLabel va face fallback intern la 'gym'.
+    console.warn('[getDayInfo] equipment lipsă sau invalid:', equipment, '— fallback gym în program.js');
+  }
+  return getDayShortLabel(dayNumber, equipment);
 }
 
 // ============================================
@@ -824,7 +822,7 @@ function buildReturningUserMessage(profile) {
     const ramase = 14 - bifate;
     const daysOverdue = calendarDay - 14;
     const nextLogicDay = bifate + 1;
-    const nextDayInfo = getDayInfo(nextLogicDay);
+    const nextDayInfo = getDayInfo(nextLogicDay, profile.equipment);
     const isRestNext = nextLogicDay === 7 || nextLogicDay === 14;
     const nextLabel = isRestNext ? 'Următoarea zi' : 'Următorul antrenament';
     
@@ -839,7 +837,7 @@ function buildReturningUserMessage(profile) {
   if (bifate < calendarDay) {
     const decalaj = calendarDay - bifate;
     const nextLogicDay = bifate + 1;
-    const nextDayInfo = getDayInfo(nextLogicDay);
+    const nextDayInfo = getDayInfo(nextLogicDay, profile.equipment);
     const isRestNext = nextLogicDay === 7 || nextLogicDay === 14;
     const nextLabel = isRestNext ? 'Următoarea zi' : 'Următorul antrenament';
     
