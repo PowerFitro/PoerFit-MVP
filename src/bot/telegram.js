@@ -322,8 +322,17 @@ export function initBot() {
         if (lastDate === today) {
           const minutesSinceMorning = Math.floor((Date.now() - new Date(lastMorningTime).getTime()) / 60000);
           if (minutesSinceMorning < 30) {
+            // Formulare condiționată: evită „acum 0 minute" care sună absurd
+            let timeRef;
+            if (minutesSinceMorning === 0) {
+              timeRef = 'chiar acum';
+            } else if (minutesSinceMorning === 1) {
+              timeRef = 'acum 1 minut';
+            } else {
+              timeRef = `acum ${minutesSinceMorning} minute`;
+            }
             await bot.sendMessage(chatId,
-              `Un antrenament corect durează 50-60 minute. Ai primit reminder-ul acum ${minutesSinceMorning} ${minutesSinceMorning === 1 ? 'minut' : 'minute'}.\n\nDă-i timpul cuvenit corpului — apoi bifează.`
+              `Un antrenament corect durează 50-60 minute. Ai primit reminder-ul ${timeRef}.\n\nDă-i timpul cuvenit corpului — apoi bifează.`
             );
             return;
           }
