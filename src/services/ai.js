@@ -429,12 +429,23 @@ REGULĂ STRICTĂ: pentru "ziua de azi" sau o zi din context, folosește EXACT in
 // emoji și fără clișee.
 
 export async function generateAntiChurnMessage(profile, riskLevel, daysSinceLastActivity) {
+  // riskLevel vine din cron.js și e calibrat pe zile reale de inactivitate:
+  // 'low' = 2 zile, 'medium' = 3 zile, 'high' = 4+ zile.
+  // Funcția NU e apelată niciodată pentru daysSince <= 1 (cron filtrează înainte).
+  const severitate = riskLevel === 'high'
+    ? 'Pauză lungă. Mesajul trebuie să fie ferm și să menționeze că pauza prelungită compromite rezultatul programului.'
+    : riskLevel === 'medium'
+    ? 'Pauză de câteva zile. Mesaj ferm, factual, fără dramatizare.'
+    : 'Pauză scurtă. Mesaj sec, simplu, o constatare și pasul de reluare. Fără dramatizare, fără avertismente.';
+
   try {
     const response = await client.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 150,
       temperature: 0.3,
-      system: `Scrii un mesaj scurt pentru un client PowerFit inactiv de ${daysSinceLastActivity} zile.
+      system: `Scrii un mesaj scurt pentru un client PowerFit care nu a mai bifat antrenament de ${daysSinceLastActivity} zile.
+
+CONTEXT SEVERITATE: ${severitate}
 
 TON: profesional, rece, direct, autoritar. Nu prieten. Nu coleg. Leader care constată și dă instrucțiune. Sam, antrenorul, nu confraternizează cu clientul.
 
@@ -452,30 +463,38 @@ REGULI ABSOLUTE:
 - Zero promisiuni sau cifre inventate
 - Imperativ și indicativ, nu condițional politicos
 
-STRUCTURĂ OBLIGATORIE:
-Propoziția 1 — constatare seacă: nume + zile absență + ziua programului.
-Propoziția 2 — instrucțiune directă SAU consecință pe program. Fără întrebări.
+INTERDICȚIE STRICTĂ — FRAZE-UMPLUTURĂ:
+Nu scrie fraze generice despre program care NU se referă direct la absența clientului. Mesajul trebuie să fie despre faptul că NU s-a antrenat și ce face acum. O frază de tip "antrenamentul se execută conform planului" sau "programul rămâne neschimbat" este UMPLUTURĂ INTERZISĂ — nu spune nimic despre situația clientului.
+
+STRUCTURĂ OBLIGATORIE — exact 2 propoziții:
+Propoziția 1 — constatare seacă: nume + numărul de zile fără antrenament + ziua din program.
+Propoziția 2 — instrucțiune CONCRETĂ despre reluare: de unde reia, sau (doar la pauză lungă) ce consecință are pe rezultat. NU o frază generică. NU o întrebare.
 
 EXEMPLE — AȘA NU / AȘA DA:
 
 AȘA NU: "Hei Maria, am observat că nu ai fost activă de 3 zile! Totul bine? Sunt aici dacă ai nevoie de ceva, doar spune!"
-AȘA DA: "Maria, 3 zile fără activitate, Ziua 5/14. Reluarea se face de la antrenamentul nefăcut, nu mai departe."
+AȘA DA: "Maria, 3 zile fără antrenament, Ziua 5/14. Reluarea se face de la antrenamentul nefăcut, nu mai departe."
+
+AȘA NU: "Andrei, 1 zi fără activitate, Ziua 5/14. Antrenamentul de azi se execută conform planului, fără modificări."
+(GREȘIT: propoziția 2 e umplutură — nu spune nimic despre reluare.)
+AȘA DA: "Andrei, 2 zile fără antrenament, Ziua 5/14. Reia azi de la antrenamentul nefăcut."
 
 AȘA NU: "Andrei, văd că ai luat o pauză mai lungă. Înțeleg că poate ai fost ocupat — vrei să adaptăm programul împreună?"
-AȘA DA: "Andrei, 5 zile fără antrenament, Ziua 7/14. Pauza prelungită compromite rezultatul. Pentru replanificare: /coach."
+AȘA DA: "Andrei, 5 zile fără antrenament, Ziua 7/14. Pauza prelungită compromite rezultatul; pentru replanificare scrie /coach."
 
 Răspunde DOAR cu textul mesajului. Fără explicații, fără preambul.`,
       messages: [{
         role: 'user',
         content: `Nume client: ${profile.full_name}
 Ziua din program: ${profile.current_day}/14
-Zile fără activitate: ${daysSinceLastActivity}`
+Zile fără antrenament: ${daysSinceLastActivity}
+Nivel: ${riskLevel}`
       }]
     });
     return response.content[0].text;
   } catch (error) {
     console.error('Anti-churn message error:', error);
     // Fallback hardcodat — ton de leader, fără politețuri sau emoji
-    return `${profile.full_name}, ${daysSinceLastActivity} zile fără activitate, Ziua ${profile.current_day}/14. Pentru replanificare: /coach.`;
+    return `${profile.full_name}, ${daysSinceLastActivity} zile fără antrenament, Ziua ${profile.current_day}/14. Reia de la antrenamentul nefăcut. Pentru replanificare: /coach.`;
   }
 }
