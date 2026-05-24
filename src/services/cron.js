@@ -115,33 +115,47 @@ export function initCronJobs() {
           
           if (!lastCheckin) continue;
           
-          const daysSince = Math.floor(
-            (Date.now() - new Date(lastCheckin.checkin_date).getTime()) / (1000 * 60 * 60 * 24)
-          );
+          // FIX B — daysSince corect, pe zile calendaristice.
+          // checkin_date și today sunt ambele string-uri YYYY-MM-DD (date pure, fără oră).
+          // Parsăm cu 'T00:00:00' — același pattern ca getCalendarProgramDay — ca să
+          // evităm umflarea artificială din diferența de fus orar.
+          // "S-a antrenat azi" → 0. "Ieri" → 1. "Acum 3 zile" → 3.
+          const todayRO = getRomaniaDate();
+          const lastDate = new Date(lastCheckin.checkin_date + 'T00:00:00');
+          const todayDate = new Date(todayRO + 'T00:00:00');
+          const daysSince = Math.round((todayDate - lastDate) / (1000 * 60 * 60 * 24));
           
-          // Calculate risk score
-          const riskScore = calculateRiskScore(profile, daysSince);
+          // FIX A — praguri directe pe zile reale de inactivitate.
+          // O zi de pauză e normală, NU e churn. Anti-churn pornește de la 2 zile.
+          // Înlocuiește scoringul cu puncte (calculateRiskScore) care declanșa
+          // fals pozitiv la 1 zi din cauza bonusurilor "early program" / "lost streak".
+          let riskLevel = null;
+          if (daysSince >= 4) {
+            riskLevel = 'high';
+          } else if (daysSince === 3) {
+            riskLevel = 'medium';
+          } else if (daysSince === 2) {
+            riskLevel = 'low';
+          }
+          // daysSince <= 1 → riskLevel rămâne null → niciun mesaj
           
-          // Cooldown global 48h: NU trimite anti-churn dacă s-a trimis în ultimele 48 ore
-          // (indiferent de risk level — evităm mesaje în zile consecutive)
-          if (riskScore >= 5) {
-            const recentlySent = await db.wasNotificationSentInLastHours(profile.id, 'anti_churn', 48);
-            if (recentlySent) {
-              await sleep(500);
-              continue;
-            }
+          if (!riskLevel) {
+            continue;
           }
           
-          if (riskScore >= 20) {
-            await sendAntiChurnMessage(profile, 'high', daysSince);
-            // Reset streak if inactive > 1 day
-            if (daysSince > 1 && profile.current_streak > 0) {
-              await db.updateProfile(profile.id, { current_streak: 0 });
-            }
-          } else if (riskScore >= 10) {
-            await sendAntiChurnMessage(profile, 'medium', daysSince);
-          } else if (riskScore >= 5) {
-            await sendAntiChurnMessage(profile, 'low', daysSince);
+          // Cooldown global 48h: NU trimite anti-churn dacă s-a trimis în ultimele 48 ore
+          // (indiferent de risk level — evităm mesaje în zile consecutive).
+          const recentlySent = await db.wasNotificationSentInLastHours(profile.id, 'anti_churn', 48);
+          if (recentlySent) {
+            await sleep(500);
+            continue;
+          }
+          
+          await sendAntiChurnMessage(profile, riskLevel, daysSince);
+          
+          // Reset streak — userul a întrerupt activitatea (daysSince >= 2 garantat aici).
+          if (profile.current_streak > 0) {
+            await db.updateProfile(profile.id, { current_streak: 0 });
           }
           
           await sleep(500);
@@ -168,29 +182,6 @@ export function initCronJobs() {
   // Reactivat după validare cu prompt strict.
 
   console.log('⏰ Cron jobs initialized (timezone: Europe/Bucharest)');
-}
-
-// ============================================
-// RISK SCORE CALCULATION
-// ============================================
-
-function calculateRiskScore(profile, daysSinceLastCheckin) {
-  let score = 0;
-  
-  // Days without activity (biggest factor)
-  score += daysSinceLastCheckin * 3;
-  
-  // Lost streak (was active, now isn't)
-  if (profile.current_streak === 0 && profile.max_streak > 2) {
-    score += 5;
-  }
-  
-  // Early in program (days 3-7 = highest churn risk)
-  if (profile.current_day >= 3 && profile.current_day <= 7) {
-    score += 3;
-  }
-  
-  return score;
 }
 
 function sleep(ms) {
