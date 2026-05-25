@@ -1,7 +1,7 @@
 import cron from 'node-cron';
 import * as db from '../db/supabase.js';
 import { sendMorningCheckin, sendEveningCheckin, sendAntiChurnMessage, sendPreProgramMessage } from '../bot/telegram.js';
-import { getRomaniaDate, getCalendarProgramDay } from '../utils/helpers.js';
+import { getRomaniaDate, getUserPhase } from '../utils/helpers.js';
 
 export function initCronJobs() {
   
@@ -22,14 +22,35 @@ export function initCronJobs() {
           const startDate = profile.program_start_date;
           
           if (!startDate || today < startDate) {
-            // PRE-PROGRAM: send preparation message
+            // PRE-PROGRAM: mesaj de pregătire
             await sendPreProgramMessage(profile, startDate);
             await sleep(1000);
-          } else {
-            // IN-PROGRAM: send regular training check-in (gestionează intern Z7/Z14 odihnă + recuperare după calendar)
-            await sendMorningCheckin(profile);
-            await sleep(1000);
+            continue;
           }
+          
+          // Programul a început — determinăm faza (sursa unică: getUserPhase).
+          const phase = getUserPhase(profile);
+          
+          if (phase.phase === 'terminat' || phase.phase === 'expirat') {
+            // Program terminat sau acces expirat — cronul nu trimite morning checkin.
+            continue;
+          }
+          
+          if (phase.phase === 'recuperare') {
+            // FEREASTRA DE RECUPERARE (zilele 15-44): NU trimitem zilnic.
+            // Doar 3 remindere, la zilele calendaristice 15, 30 și 40 (decizia 2b).
+            // În restul zilelor userul poate bifa oricând prin /checkin, dar botul tace.
+            if (phase.calendarDay === 15 || phase.calendarDay === 30 || phase.calendarDay === 40) {
+              await sendMorningCheckin(profile);
+              await sleep(1000);
+            }
+            continue;
+          }
+          
+          // FAZA ACTIV (calendar 1-14): morning checkin normal.
+          // sendMorningCheckin gestionează intern zilele de odihnă Z7/Z14.
+          await sendMorningCheckin(profile);
+          await sleep(1000);
         } catch (err) {
           // CRITIC: izolăm eroarea per-user. Un user care a blocat botul (403)
           // sau orice altă eroare NU mai trebuie să oprească livrarea pentru restul.
@@ -61,14 +82,13 @@ export function initCronJobs() {
           // Skip pre-program users (no evening check-in before start)
           if (profile.program_start_date && today < profile.program_start_date) continue;
           
-          // Skip rest days (Z7 și Z14 — n-are ce să bifeze)
-          const calendarDay = getCalendarProgramDay(profile.program_start_date);
-          if (calendarDay === null || calendarDay <= 0) continue;
-          if (calendarDay === 7 || calendarDay === 14) continue;
-          
-          // NOTĂ: nu mai facem skip la calendar > 14. Dacă userul e în recuperare
-          // (calendar trecut Z14 dar bifate < 14), evening checkin trebuie să-l încurajeze să bifeze.
-          // sendEveningCheckin gestionează intern (verifică dacă a bifat deja azi).
+          // Evening checkin se trimite DOAR în faza activ (calendar 1-14, zi de
+          // antrenament). sendEveningCheckin verifică intern și faza, și ziua de
+          // odihnă, și dacă userul a bifat deja — dar filtrăm aici ca să nu apelăm
+          // funcția degeaba pentru useri în recuperare / terminat / expirat.
+          const phase = getUserPhase(profile);
+          if (phase.phase !== 'activ') continue;
+          if (phase.isRestDay) continue;
           
           const alreadySent = await db.wasNotificationSentToday(profile.id, 'evening_checkin');
           if (!alreadySent) {
@@ -101,15 +121,22 @@ export function initCronJobs() {
       
       for (const profile of profiles) {
         try {
+          // Sursa unică de adevăr pentru starea userului.
+          const phase = getUserPhase(profile);
+          
           // Skip dacă programul nu a început
-          const calendarDay = getCalendarProgramDay(profile.program_start_date);
-          if (calendarDay === null || calendarDay <= 0) continue;
+          if (phase.phase === 'pre_program') continue;
           
-          // Skip dacă e zi de odihnă în program (normal să nu bifeze nimic)
-          if (calendarDay === 7 || calendarDay === 14) continue;
+          // Skip zi de odihnă (Z7/Z14) — normal să nu fi bifat nimic azi
+          if (phase.isRestDay) continue;
           
-          // NOTĂ: Anti-churn rulează și pentru userii în recuperare (calendar > 14, bifate < 14)
-          // pentru a-i încuraja să termine cele 14 zile.
+          // Skip fazele terminat și expirat:
+          // - terminat: userul a făcut toate 12 antrenamentele, nu există "churn"
+          // - expirat: accesul s-a închis, un mesaj "mai ai de recuperat" e incoerent
+          if (phase.phase === 'terminat' || phase.phase === 'expirat') continue;
+          
+          // Anti-churn rulează pentru faza activ ȘI recuperare (calendar 15-44,
+          // bifate < 12) — în recuperare îl încurajăm să termine cele 12 antrenamente.
           
           const lastCheckin = await db.getLastCheckin(profile.id);
           
