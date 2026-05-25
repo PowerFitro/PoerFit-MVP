@@ -1,7 +1,7 @@
 import TelegramBot from 'node-telegram-bot-api';
 import * as db from '../db/supabase.js';
 import * as ai from '../services/ai.js';
-import { getCalendarProgramDay, getRomaniaDate } from '../utils/helpers.js';
+import { getCalendarProgramDay, getRomaniaDate, getUserPhase, workoutNumberToProgramDay, expectedWorkoutsByDay } from '../utils/helpers.js';
 import { getDayShortLabel } from '../data/program.js';
 
 let bot;
@@ -112,11 +112,12 @@ export function initBot() {
       const adminChatId = process.env.TELEGRAM_ADMIN_CHAT_ID;
       if (adminChatId) {
         try {
+          const escPhase = getUserPhase(profile);
           await bot.sendMessage(adminChatId,
             'ESCALADARE\n\n' +
             'Client: ' + profile.full_name + '\n' +
             'Email: ' + profile.email + '\n' +
-            'Ziua: ' + profile.current_day + '/14\n' +
+            'Progres: ' + escPhase.bifate + '/12 antrenamente (' + escPhase.phase + ')\n' +
             'Chat ID: ' + chatId,
             {}
           );
@@ -209,9 +210,11 @@ export function initBot() {
       return;
     }
     
-    // PENDING WORKOUT DAY: setăm ziua pe care urmează să o bifeze
-    // Logică: dacă suntem în calendar 1-14 → calendarDay; altfel (recuperare) → bifate+1
-    const pendingDay = (calendarDay >= 1 && calendarDay <= 14) ? calendarDay : (profile.current_day || 0) + 1;
+    // PENDING WORKOUT DAY: ziua de program a antrenamentului care urmează a fi bifat.
+    // = workoutNumberToProgramDay(bifate + 1). Nu ziua calendaristică — userul
+    // poate fi în urmă, iar antrenamentul corect e următorul nebifat.
+    const nextWorkoutCheckin = (profile.current_day || 0) + 1;
+    const pendingDay = workoutNumberToProgramDay(nextWorkoutCheckin) || 1;
     await db.setPendingWorkoutDay(profile.id, pendingDay);
     
     await bot.sendMessage(chatId, 
@@ -342,26 +345,27 @@ export function initBot() {
       const rating = parseInt(data.split('_')[1]);
       const today = getRomaniaDate();
       
-      // Calculez ziua calendaristică reală (sursa de adevăr — nu current_day + 1)
-      const calendarDay = getCalendarProgramDay(profile.program_start_date);
-      
       // PROGRAM_DAY: citim pending_workout_day ca sursa de adevăr.
-      // Setat la momentul trimiterii butonului (4 puncte: morning normal, morning recovery, morning_ready, /checkin).
-      // Fallback la calcul vechi DOAR dacă pending e null (defensive — n-ar trebui să se întâmple în flow normal).
+      // Setat la momentul trimiterii butonului (morning normal, morning recovery, morning_ready, /checkin).
+      // Fallback DOAR dacă pending e null (race condition / flow neobișnuit):
+      // ziua de program a antrenamentului următor = workoutNumberToProgramDay(bifate + 1).
       let programDay;
       if (profile.pending_workout_day !== null && profile.pending_workout_day !== undefined && profile.pending_workout_day >= 1 && profile.pending_workout_day <= 14) {
         programDay = profile.pending_workout_day;
       } else {
-        // FALLBACK: pending nu e setat (race condition sau user a folosit flow neobișnuit)
-        programDay = (calendarDay !== null && calendarDay >= 1 && calendarDay <= 14) ? calendarDay : (profile.current_day || 0) + 1;
-        console.warn('pending_workout_day NULL pentru user', profile.id, '— fallback la', programDay);
+        // FALLBACK: pending nu e setat. Ziua de program a antrenamentului care urmează.
+        const nextWorkout = (profile.current_day || 0) + 1;
+        programDay = workoutNumberToProgramDay(nextWorkout) || 1;
+        console.warn('pending_workout_day NULL pentru user', profile.id, '— fallback la Ziua', programDay);
       }
       
-      // current_day reprezintă progresul userului (numărul de zile bifate)
-      // Avansează la programDay (ziua calendaristică actuală) după bifare
-      const newDay = Math.max((profile.current_day || 0) + 1, programDay);
+      // current_day = antrenamente reale bifate. La o bifare crește cu exact 1.
+      // FĂRĂ Math.max — current_day NU mai e amestecat cu ziua calendaristică.
+      // Asta elimină bug-ul de coerență (botul zicea 13 și salva 14).
+      const bifateInainte = profile.current_day || 0;
+      const newDay = bifateInainte + 1;
       
-      // Save check-in cu ziua calendaristică reală
+      // Save check-in cu ziua de program reală (din pending, setat la trimiterea butonului)
       await db.saveCheckin({
         user_id: profile.id,
         checkin_type: 'workout',
@@ -372,32 +376,30 @@ export function initBot() {
         program_day: programDay
       });
       
-      // Update profile day — programul s-a încheiat dacă userul a bifat 14 antrenamente reale
+      // Programul e terminat când userul a bifat toate 12 antrenamentele reale.
       // RESET ATOMIC pending_workout_day la null în același update (un singur round-trip DB)
-      const userFinishedAllWorkouts = newDay >= 14;
+      const userFinishedAllWorkouts = newDay >= 12;
       await db.updateProfile(profile.id, { 
         current_day: newDay,
         pending_workout_day: null,
         ...(userFinishedAllWorkouts ? { program_completed: true, program_completed_date: new Date().toISOString() } : {})
       });
       
-      // Build response — coach uman, fără gamification
-      // 3 cazuri distincte:
-      // A) User a bifat toate 14 antrenamente → felicitare finală
-      // B) Calendar a trecut Z14, user încă recuperează → mesaj recuperare
-      // C) În program normal → mesaj standard
-      let response;
+      // Build response — faza se recalculează cu noua valoare bifate (newDay).
+      // Construim un profil actualizat ca getUserPhase să vadă starea de DUPĂ bifare.
+      const profileAfter = { ...profile, current_day: newDay };
+      const phaseAfter = getUserPhase(profileAfter);
       
+      let response;
       if (userFinishedAllWorkouts) {
-        // Cazul A — terminat real
-        response = `Ziua 14 bifată. Programul PowerFit de 14 zile încheiat.\n\nSam revine personal pentru pașii următori.`;
-      } else if (calendarDay !== null && calendarDay > 14) {
-        // Cazul B — recuperare după ce calendarul a trecut
-        const daysOverdue = calendarDay - 14;
-        response = `Ziua ${programDay} bifată. Programul calendar s-a încheiat acum ${daysOverdue} ${daysOverdue === 1 ? 'zi' : 'zile'}, dar continui să recuperezi. Bun lucru.`;
+        // A bifat toate 12 antrenamentele — încheiere finală.
+        response = `Antrenament bifat. Ai terminat toate cele 12 antrenamente — programul PowerFit este încheiat.\n\nAi acces la materialele programului încă 30 de zile. Sam revine personal pentru pașii următori.`;
+      } else if (phaseAfter.phase === 'recuperare') {
+        // În fereastra de recuperare (calendar a trecut Z14, mai are antrenamente).
+        response = `Antrenament bifat. Ai ${phaseAfter.bifate} din 12 antrenamente făcute. Mai ai ${phaseAfter.ramase} de recuperat în ${phaseAfter.daysUntilAccessEnds} zile.`;
       } else {
-        // Cazul C — în program normal
-        response = `Ziua ${programDay} bifată. Bun lucru.`;
+        // Faza activ — în interiorul celor 14 zile.
+        response = `Antrenament bifat — ${newDay} din 12. Bun lucru.`;
       }
       
       // Ask about pain zones
@@ -453,8 +455,9 @@ export function initBot() {
     
     // --- MORNING CHECK-IN RESPONSES ---
     if (data === 'morning_ready') {
-      // PENDING WORKOUT DAY: ziua pe care urmează să o bifeze e current_day + 1 (flow standard)
-      const expectedDay = (profile.current_day || 0) + 1;
+      // Ziua de program a antrenamentului care urmează = workoutNumberToProgramDay(bifate + 1).
+      const nextWorkout = (profile.current_day || 0) + 1;
+      const expectedDay = workoutNumberToProgramDay(nextWorkout) || 1;
       await db.setPendingWorkoutDay(profile.id, expectedDay);
       
       const dayInfo = getDayInfo(expectedDay, profile.equipment);
@@ -545,10 +548,11 @@ export function initBot() {
       if (escalationKeywords.some(kw => normalizedText.includes(kw))) {
         const adminChatId = process.env.TELEGRAM_ADMIN_CHAT_ID;
         if (adminChatId) {
+          const escKwPhase = getUserPhase(profile);
           await bot.sendMessage(adminChatId,
             `⚠️ POSIBILĂ ESCALADARE\n\n` +
             `Client: ${profile.full_name}\n` +
-            `Ziua: ${profile.current_day}/14\n` +
+            `Progres: ${escKwPhase.bifate}/12 antrenamente (${escKwPhase.phase})\n` +
             `Mesaj: "${msg.text}"\n\n` +
             `Verifică conversația și intervino dacă e cazul.`
           );
@@ -571,98 +575,93 @@ export function initBot() {
 export async function sendMorningCheckin(profile) {
   if (!bot || !profile.telegram_chat_id) return;
   
-  // Calculăm ziua calendaristică din program_start_date
-  const calendarDay = getCalendarProgramDay(profile.program_start_date);
-  const bifate = profile.current_day || 0;
+  const phase = getUserPhase(profile);
+  const { calendarDay, bifate, ramase } = phase;
   
-  // Programul nu a început (pre-program)
-  if (calendarDay === null || calendarDay <= 0) return;
+  // Pre-program, terminat, expirat → cronul nu trimite morning checkin.
+  // (Remindere de recuperare sunt gestionate separat de cron — vezi cron.js.)
+  if (phase.phase === 'pre_program' || phase.phase === 'terminat' || phase.phase === 'expirat') {
+    return;
+  }
   
-  // CAZ SPECIAL: Calendar > 14 + USER A BIFAT TOATE 14 → terminat real, nu mai trimitem morning
-  if (calendarDay > 14 && bifate >= 14) return;
-  
-  // CAZ SPECIAL: Calendar > 14 + USER N-A bifat 14 → recuperare post-calendar
-  if (calendarDay > 14 && bifate < 14) {
-    const ramase = 14 - bifate;
-    const nextLogicDay = bifate + 1;
-    const nextDayInfo = getDayInfo(nextLogicDay, profile.equipment);
-    const daysOverdue = calendarDay - 14;
+  // ── FAZA RECUPERARE: calendarul a trecut Z14, userul mai are antrenamente ──
+  // Mesajul indică următorul antrenament de recuperat. Cron-ul decide ZILELE
+  // în care apelează această funcție (15, 30, 40) — aici doar construim mesajul.
+  if (phase.phase === 'recuperare') {
+    const nextWorkout = bifate + 1;                              // al câtelea antrenament
+    const nextProgramDay = workoutNumberToProgramDay(nextWorkout); // ziua de program
+    const nextDayInfo = getDayInfo(nextProgramDay, profile.equipment);
     
     const message = 'Bună dimineața, ' + profile.full_name + '.\n\n' +
-      'Programul calendar de 14 zile s-a încheiat acum ' + daysOverdue + ' ' + (daysOverdue === 1 ? 'zi' : 'zile') + '.\n' +
-      'Tu mai ai ' + ramase + ' ' + (ramase === 1 ? 'antrenament' : 'antrenamente') + ' de făcut pentru a finaliza programul de bază.\n\n' +
-      'Următorul: Ziua ' + nextLogicDay + ' — ' + nextDayInfo + '\n\n' +
-      'Pentru rezultatul programului, le termini. Instrucțiunile post-program vin după ce bifezi toate 14.';
+      'Programul calendaristic de 14 zile s-a încheiat. Ai ' + bifate + ' din 12 antrenamente făcute.\n\n' +
+      'Mai ai ' + ramase + ' ' + (ramase === 1 ? 'antrenament' : 'antrenamente') + ' de recuperat și ' +
+      phase.daysUntilAccessEnds + ' ' + (phase.daysUntilAccessEnds === 1 ? 'zi' : 'zile') + ' de acces la program.\n\n' +
+      'Următorul: Ziua ' + nextProgramDay + ' — ' + nextDayInfo;
     
-    // PENDING WORKOUT DAY: setăm ziua pe care urmează să o recupereze (înainte de a trimite butonul)
-    await db.setPendingWorkoutDay(profile.id, nextLogicDay);
+    await db.setPendingWorkoutDay(profile.id, nextProgramDay);
     
     await bot.sendMessage(profile.telegram_chat_id, message, {
       reply_markup: {
         inline_keyboard: [[
-          { text: 'Recuperez Ziua ' + nextLogicDay + ' azi', callback_data: 'workout_yes' }
+          { text: 'Recuperez Ziua ' + nextProgramDay + ' azi', callback_data: 'workout_yes' }
         ]]
       }
     });
     
-    await db.logNotification(profile.id, 'morning_checkin', 'telegram', 'Recovery: ' + ramase + ' workouts left, calendar overdue');
+    await db.logNotification(profile.id, 'morning_checkin', 'telegram', 'Recovery reminder: ' + ramase + ' workouts left');
     return;
   }
   
-  // De aici încolo: calendar e între 1 și 14 (program normal)
-  const dayInfo = getDayInfo(calendarDay, profile.equipment);
-  const isRestDay = calendarDay === 7 || calendarDay === 14;
+  // ── FAZA ACTIV: calendar între 1 și 14 ──
+  const isRestDay = phase.isRestDay;          // ziua 7 sau 14
   const isCardioDay = calendarDay === 4 || calendarDay === 11;
   
-  // Pentru zilele de odihnă: avansăm automat current_day ca să nu rămână userul blocat
-  // Asta evită bucla infinită cu Z7/Z14 (Bug B)
-  if (isRestDay && bifate < calendarDay) {
-    await db.updateProfile(profile.id, { current_day: calendarDay });
-  }
+  // NU mai avansăm automat current_day la zilele de odihnă.
+  // current_day = strict antrenamente bifate; o zi de odihnă nu e un antrenament.
+  // Userul nu rămâne "blocat": morning checkin la zi de odihnă trimite mesaj de
+  // odihnă (fără buton), iar a doua zi calendarul avansează singur.
   
   let message = '';
   
   if (isRestDay) {
-    if (calendarDay === 14) {
-      // Z14 calendar — mesaj diferit dacă user a bifat tot vs n-a bifat tot
-      if (bifate >= 14) {
-        // A terminat real
-        message = 'Bună dimineața, ' + profile.full_name + '.\n\n' +
-          'Ziua 14/14 — Zi de odihnă. Programul de 14 zile încheiat.\n\n' +
-          'Azi te odihnești complet. Mâine vin instrucțiunile post-program.';
-      } else {
-        // Calendar a ajuns la Z14 dar userul n-a bifat tot — onestitate
-        const ramase = 14 - bifate;
-        message = 'Bună dimineața, ' + profile.full_name + '.\n\n' +
-          'Ziua 14/14 calendaristic — Zi de odihnă.\n\n' +
-          'Ai bifat ' + bifate + ' din 14 antrenamente. Mai sunt ' + ramase + ' ' + (ramase === 1 ? 'antrenament' : 'antrenamente') + ' nefăcute. Le poți recupera în zilele următoare — programul nu se închide până nu termini.';
-      }
-    } else {
-      // Z7 odihnă
-      message = 'Bună dimineața, ' + profile.full_name + '.\n\n' +
-        'Ziua ' + calendarDay + '/14 — Zi de odihnă.\n\n' +
-        'Corpul se recuperează și crește azi. Respectă planul alimentar și odihnește-te. Mâine reintri în program.';
-    }
-  } else if (isCardioDay) {
+    // Zi de odihnă (7 sau 14). Mesaj de odihnă, fără buton de bifare.
     message = 'Bună dimineața, ' + profile.full_name + '.\n\n' +
-      'Ziua ' + calendarDay + '/14 — ' + dayInfo + '\n\n' +
-      'Dacă simți oboseala acumulată după primele zile, ia o pauză completă azi. Programul se decalează cu o zi. Dacă te simți bine, execuți cardio conform programului.';
+      'Ziua ' + calendarDay + '/14 — Zi de odihnă.\n\n' +
+      'Corpul se recuperează și crește azi. Respectă planul alimentar și odihnește-te. Mâine reintri în program.';
   } else {
-    message = 'Bună dimineața, ' + profile.full_name + '.\n\n' +
-      'Ziua ' + calendarDay + '/14 — ' + dayInfo + '\n\n' +
-      'Deschide lecția în PowerFit și urmează instrucțiunile. După antrenament, apasă butonul de mai jos.';
+    // Zi de antrenament (sau cardio). Antrenamentul de făcut e următorul nebifat —
+    // poate diferi de ziua calendaristică dacă userul e în urmă.
+    const nextWorkout = bifate + 1;
+    const nextProgramDay = workoutNumberToProgramDay(nextWorkout);
+    const dayInfo = getDayInfo(nextProgramDay, profile.equipment);
+    const inUrma = nextProgramDay < calendarDay;
+    
+    if (isCardioDay && !inUrma) {
+      // Zi de cardio și userul e la zi — mesaj specific cardio.
+      message = 'Bună dimineața, ' + profile.full_name + '.\n\n' +
+        'Ziua ' + calendarDay + '/14 — ' + dayInfo + '\n\n' +
+        'Dacă simți oboseala acumulată după primele zile, ia o pauză completă azi. Programul se decalează cu o zi. Dacă te simți bine, execuți cardio conform programului.';
+    } else if (inUrma) {
+      // Userul e în urmă — îi dăm antrenamentul nebifat, nu ziua calendaristică.
+      message = 'Bună dimineața, ' + profile.full_name + '.\n\n' +
+        'Ziua ' + calendarDay + '/14 calendaristic. Ai ' + bifate + ' din 12 antrenamente făcute.\n\n' +
+        'Următorul antrenament de făcut: Ziua ' + nextProgramDay + ' — ' + dayInfo + '\n\n' +
+        'Deschide lecția în PowerFit și urmează instrucțiunile. După antrenament, apasă butonul de mai jos.';
+    } else {
+      // La zi — antrenament normal.
+      message = 'Bună dimineața, ' + profile.full_name + '.\n\n' +
+        'Ziua ' + calendarDay + '/14 — ' + dayInfo + '\n\n' +
+        'Deschide lecția în PowerFit și urmează instrucțiunile. După antrenament, apasă butonul de mai jos.';
+    }
+    
+    // PENDING WORKOUT DAY: ziua de program a antrenamentului care urmează.
+    await db.setPendingWorkoutDay(profile.id, nextProgramDay);
   }
   
-  // Buton DOAR pentru zilele de antrenament și cardio (NU pentru odihnă)
+  // Buton DOAR pentru zilele de antrenament (NU pentru odihnă).
   const keyboard = isRestDay ? [] : [[
     { text: 'Am terminat antrenamentul', callback_data: 'workout_yes' }
   ]];
-  
-  // PENDING WORKOUT DAY: setăm DOAR pentru zilele cu buton (antrenament + cardio)
-  // Pentru zilele de odihnă NU setăm — userul nu are ce bifa
-  if (!isRestDay) {
-    await db.setPendingWorkoutDay(profile.id, calendarDay);
-  }
   
   await bot.sendMessage(profile.telegram_chat_id, message, 
     keyboard.length > 0 ? { reply_markup: { inline_keyboard: keyboard } } : {}
@@ -674,9 +673,12 @@ export async function sendMorningCheckin(profile) {
 export async function sendEveningCheckin(profile) {
   if (!bot || !profile.telegram_chat_id) return;
   
-  // Nu trimite evening checkin în zilele de odihnă (Z7, Z14) — n-ai ce să bifezi
-  const calendarDay = getCalendarProgramDay(profile.program_start_date);
-  if (calendarDay === 7 || calendarDay === 14 || calendarDay === null || calendarDay <= 0 || calendarDay > 14) return;
+  // Evening checkin se trimite DOAR în faza activ, în zilele de antrenament.
+  // Nu în pre-program, nu în zilele de odihnă (n-ai ce bifa), nu în recuperare
+  // (acolo trimitem doar 3 remindere, nu mesaje zilnice), nu în terminat/expirat.
+  const phase = getUserPhase(profile);
+  if (phase.phase !== 'activ') return;
+  if (phase.isRestDay) return;
   
   // Check if already checked in today
   const today = getRomaniaDate();
@@ -718,10 +720,11 @@ export async function sendAntiChurnMessage(profile, riskLevel, daysSince) {
   if (riskLevel === 'high') {
     const adminChatId = process.env.TELEGRAM_ADMIN_CHAT_ID;
     if (adminChatId) {
+      const churnPhase = getUserPhase(profile);
       await bot.sendMessage(adminChatId,
         `RISC RIDICAT ABANDON\n\n` +
         `Client: ${profile.full_name} (@${profile.telegram_username || 'N/A'})\n` +
-        `Ziua: ${profile.current_day}/14\n` +
+        `Progres: ${churnPhase.bifate}/12 antrenamente (${churnPhase.phase})\n` +
         `Inactiv de ${daysSince} zile\n\n` +
         `Recomandare: contactează-l direct.`
       );
@@ -787,19 +790,14 @@ Pentru discuție directă cu Sam: /coach.`;
 // ============================================
 // RETURNING USER MESSAGE — /start pentru profil deja conectat
 // ============================================
-// Diferentiat pe 4 cazuri:
-//   A) Terminat (calendar > 14 + bifate >= 14)        → felicitare + redirect /coach
-//   B) Recuperare post-calendar (calendar > 14 + bifate < 14) → cate antrenamente mai are
-//   C) In program (1 <= calendar <= 14)              → la zi sau in urma, cu detalii
-//   D) Pre-program (calendar <= 0 sau null)          → cate zile pana la start
-// Pattern de referinta: sendMorningCheckin (acelasi tratament al cazurilor)
+// Diferentiat pe cele 5 faze din getUserPhase (sursa unică de adevăr).
 function buildReturningUserMessage(profile) {
-  const calendarDay = getCalendarProgramDay(profile.program_start_date);
-  const bifate = profile.current_day || 0;
+  const phase = getUserPhase(profile);
+  const { calendarDay, bifate, ramase } = phase;
   const name = profile.full_name;
   
-  // CAZ D — Pre-program (programul nu a inceput inca)
-  if (calendarDay === null || calendarDay <= 0) {
+  // PRE-PROGRAM — programul nu a început încă
+  if (phase.phase === 'pre_program') {
     if (!profile.program_start_date) {
       return name + ', programul nu are dată de start setată. Pentru clarificare: /coach.';
     }
@@ -809,46 +807,46 @@ function buildReturningUserMessage(profile) {
       return name + ', programul începe mâine. Ziua 1: antrenament complet + plan alimentar.\n\n' +
         'Mâine dimineață la 8:00 primești primul mesaj cu antrenamentul zilei.';
     }
-    
-    // daysUntilStart >= 2 (cazul === 1 e tratat mai sus, < 1 e exclus de calendarDay <= 0)
     return name + ', programul începe în ' + daysUntilStart + ' zile. Ești în săptămâna de pregătire.\n\n' +
       'Folosește timpul pentru macronutrienți, lista de cumpărături și antrenamentul pregătitor. În secțiunile "Informații utile" și "Alimentație" ai detaliile complete.';
   }
   
-  // CAZ A — Terminat real (calendar a trecut Z14 + a bifat toate 14)
-  if (calendarDay > 14 && bifate >= 14) {
-    return name + ', programul PowerFit de 14 zile încheiat.\n\n' +
-      'Sam revine personal pentru pașii următori. Pentru contact direct: /coach.';
+  // TERMINAT — a bifat toate 12 antrenamentele
+  if (phase.phase === 'terminat') {
+    return name + ', ai terminat toate cele 12 antrenamente — programul PowerFit este încheiat.\n\n' +
+      'Ai acces la materialele programului încă 30 de zile. Pentru pașii următori: /coach.';
   }
   
-  // CAZ B — Recuperare post-calendar (calendar a trecut Z14 + bifate < 14)
-  if (calendarDay > 14 && bifate < 14) {
-    const ramase = 14 - bifate;
-    const daysOverdue = calendarDay - 14;
-    const nextLogicDay = bifate + 1;
-    const nextDayInfo = getDayInfo(nextLogicDay, profile.equipment);
-    const isRestNext = nextLogicDay === 7 || nextLogicDay === 14;
-    const nextLabel = isRestNext ? 'Următoarea zi' : 'Următorul antrenament';
+  // EXPIRAT — perioada de acces s-a încheiat
+  if (phase.phase === 'expirat') {
+    return name + ', perioada de acces la program s-a încheiat. Pentru reînnoire sau întrebări: /coach.';
+  }
+  
+  // RECUPERARE — calendar a trecut Z14, mai are antrenamente
+  if (phase.phase === 'recuperare') {
+    const nextWorkout = bifate + 1;
+    const nextProgramDay = workoutNumberToProgramDay(nextWorkout);
+    const nextDayInfo = getDayInfo(nextProgramDay, profile.equipment);
     
-    return name + ', programul calendar de 14 zile s-a încheiat acum ' + daysOverdue + ' ' + (daysOverdue === 1 ? 'zi' : 'zile') + '. Bifate: ' + bifate + '/14. Mai sunt ' + ramase + ' de recuperat.\n\n' +
-      nextLabel + ': Ziua ' + nextLogicDay + ' — ' + nextDayInfo + '.';
+    return name + ', programul calendaristic de 14 zile s-a încheiat. Ai ' + bifate + ' din 12 antrenamente făcute. Mai ai ' + ramase + ' de recuperat și ' +
+      phase.daysUntilAccessEnds + ' ' + (phase.daysUntilAccessEnds === 1 ? 'zi' : 'zile') + ' de acces.\n\n' +
+      'Următorul antrenament: Ziua ' + nextProgramDay + ' — ' + nextDayInfo + '.';
   }
   
-  // CAZ C — In program normal (1 <= calendar <= 14)
-  // Sub-caz C1: in urma (bifate < calendarDay)
-  if (bifate < calendarDay) {
-    const decalaj = calendarDay - bifate;
-    const nextLogicDay = bifate + 1;
-    const nextDayInfo = getDayInfo(nextLogicDay, profile.equipment);
-    const isRestNext = nextLogicDay === 7 || nextLogicDay === 14;
-    const nextLabel = isRestNext ? 'Următoarea zi' : 'Următorul antrenament';
+  // ACTIV — în interiorul celor 14 zile
+  const datorate = expectedWorkoutsByDay(calendarDay);
+  if (bifate < datorate) {
+    // În urmă față de calendar
+    const nextWorkout = bifate + 1;
+    const nextProgramDay = workoutNumberToProgramDay(nextWorkout);
+    const nextDayInfo = getDayInfo(nextProgramDay, profile.equipment);
     
-    return name + ', calendarul e la Ziua ' + calendarDay + '/14. Bifate: ' + bifate + '. ' + decalaj + ' ' + (decalaj === 1 ? 'zi' : 'zile') + ' în urmă — recuperabil.\n\n' +
-      nextLabel + ': Ziua ' + nextLogicDay + ' — ' + nextDayInfo + '.';
+    return name + ', Ziua ' + calendarDay + '/14 calendaristic. Ai ' + bifate + ' din 12 antrenamente făcute — ești în urmă, recuperabil.\n\n' +
+      'Următorul antrenament: Ziua ' + nextProgramDay + ' — ' + nextDayInfo + '.';
   }
   
-  // Sub-caz C2: la zi (bifate >= calendarDay)
-  return name + ', Ziua ' + bifate + '/14. La zi cu programul.';
+  // La zi cu programul
+  return name + ', Ziua ' + calendarDay + '/14. Ai ' + bifate + ' din 12 antrenamente făcute. La zi cu programul.';
 }
 
 
@@ -856,65 +854,49 @@ function buildReturningUserMessage(profile) {
 // ============================================
 // STATUS MESSAGE — /status pentru profil deja conectat
 // ============================================
-// Diferentiat pe aceleasi 4 cazuri ca buildReturningUserMessage,
-// dar cu stats reale (numar antrenamente, dificultate medie).
-// In pre-program nu afisam stats (n-au sens, sunt toate zero).
+// Diferentiat pe cele 5 faze din getUserPhase, cu stats reale.
 function buildStatusMessage(profile, stats) {
-  const calendarDay = getCalendarProgramDay(profile.program_start_date);
-  const bifate = profile.current_day || 0;
+  const phase = getUserPhase(profile);
+  const { calendarDay, bifate, ramase } = phase;
   const avgDiff = stats.avgDifficulty ? stats.avgDifficulty.toFixed(1) : null;
+  const diffLine = avgDiff ? '\n\nDificultate medie: ' + avgDiff + '/5' : '';
   
-  // CAZ D — Pre-program: zero stats relevante
-  if (calendarDay === null || calendarDay <= 0) {
+  // PRE-PROGRAM — zero stats relevante
+  if (phase.phase === 'pre_program') {
     if (!profile.program_start_date) {
       return 'Programul nu are dată de start setată. Pentru clarificare: /coach.';
     }
     const daysUntilStart = getDaysUntilStart(profile.program_start_date);
-    
     if (daysUntilStart === 1) {
       return 'Programul începe mâine. Ești în săptămâna de pregătire — antrenamentele se bifează din Ziua 1.';
     }
-    // daysUntilStart >= 2 (cazul === 1 e tratat mai sus, < 1 e exclus de calendarDay <= 0)
     return 'Programul tău începe în ' + daysUntilStart + ' zile. Ești în săptămâna de pregătire — antrenamentele se bifează din Ziua 1.';
   }
   
-  // CAZ A — Terminat real
-  if (calendarDay > 14 && bifate >= 14) {
-    let msg = 'Ai bifat toate 14 antrenamente. Programul s-a încheiat.';
-    if (avgDiff) {
-      msg += '\n\nDificultate medie: ' + avgDiff + '/5';
-    }
-    msg += '\n\nSam te contactează personal pentru pașii următori.';
-    return msg;
+  // TERMINAT
+  if (phase.phase === 'terminat') {
+    return 'Ai bifat toate cele 12 antrenamente. Programul PowerFit este încheiat.' + diffLine +
+      '\n\nAi acces la materiale încă 30 de zile. Pentru pașii următori: /coach.';
   }
   
-  // CAZ B — Recuperare post-calendar
-  if (calendarDay > 14 && bifate < 14) {
-    const ramase = 14 - bifate;
-    const daysOverdue = calendarDay - 14;
-    let msg = 'Ai bifat ' + bifate + ' din 14 antrenamente. Programul calendar s-a încheiat acum ' + daysOverdue + ' ' + (daysOverdue === 1 ? 'zi' : 'zile') + ' — mai ai ' + ramase + ' de recuperat.';
-    if (avgDiff) {
-      msg += '\n\nDificultate medie: ' + avgDiff + '/5';
-    }
-    return msg;
+  // EXPIRAT
+  if (phase.phase === 'expirat') {
+    return 'Perioada de acces la program s-a încheiat. Pentru reînnoire: /coach.';
   }
   
-  // CAZ C1 — In program, in urma
-  if (bifate < calendarDay) {
-    const decalaj = calendarDay - bifate;
-    let msg = 'Ziua ' + calendarDay + '/14 calendaristic. Ai bifat ' + bifate + ' antrenamente — cu ' + decalaj + ' ' + (decalaj === 1 ? 'zi' : 'zile') + ' în urmă.';
-    if (avgDiff) {
-      msg += '\n\nDificultate medie: ' + avgDiff + '/5';
-    }
-    return msg;
+  // RECUPERARE
+  if (phase.phase === 'recuperare') {
+    return 'Ai ' + bifate + ' din 12 antrenamente făcute. Programul calendaristic s-a încheiat — mai ai ' +
+      ramase + ' de recuperat și ' + phase.daysUntilAccessEnds + ' ' +
+      (phase.daysUntilAccessEnds === 1 ? 'zi' : 'zile') + ' de acces.' + diffLine;
   }
   
-  // CAZ C2 — In program, la zi
-  let msg = 'Ziua ' + bifate + '/14. La zi cu programul.';
-  if (avgDiff) {
-    msg += '\n\nDificultate medie: ' + avgDiff + '/5';
+  // ACTIV — în program
+  const datorate = expectedWorkoutsByDay(calendarDay);
+  if (bifate < datorate) {
+    return 'Ziua ' + calendarDay + '/14 calendaristic. Ai ' + bifate + ' din 12 antrenamente făcute — ești în urmă, recuperabil.' + diffLine;
   }
-  return msg;
+  return 'Ziua ' + calendarDay + '/14. Ai ' + bifate + ' din 12 antrenamente făcute. La zi cu programul.' + diffLine;
 }
 
 
