@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { formatDayForAI, getProgramDay } from '../data/program.js';
-import { getCalendarProgramDay } from '../utils/helpers.js';
+import { getUserPhase, workoutNumberToProgramDay, expectedWorkoutsByDay } from '../utils/helpers.js';
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -320,20 +320,20 @@ PROFILUL CLIENTULUI
 - Obiectiv: ${userProfile.goal === 'fat_loss' ? 'Pierdere grăsime' : userProfile.goal === 'toning' ? 'Tonifiere' : 'Masă musculară'}
 - Restricții alimentare: ${userProfile.dietary_restrictions?.join(', ') || 'Niciuna'}` : '';
 
-  // Construim contextul zilei curente — sursa de adevăr pentru AI
-  // 4 cazuri distincte (ordinea contează — verificate de sus în jos):
-  //   1) Pre-program (calendar nu a început)
-  //   2) Calendar trecut Z14 + USER A BIFAT 14 → terminat real (rar)
-  //   3) Calendar trecut Z14 + USER NU a bifat 14 → recuperare post-calendar (frecvent)
-  //   4) În program normal (calendar 1-14)
+  // Construim contextul zilei curente — sursa de adevăr pentru AI.
+  // Faza vine din getUserPhase (helpers.js) — ACEEAȘI funcție folosită de
+  // telegram.js și cron.js. Cele trei nu se pot contrazice.
+  //
+  // Cele 5 faze: pre_program | activ | terminat | recuperare | expirat
+  // Numerele: calendarDay = ziua calendaristică (afișaj "Ziua X/14")
+  //           bifate = antrenamente reale bifate (0-12)
   let dayContext = '';
   if (userProfile) {
     const equipment = userProfile.equipment === 'outdoor' ? 'outdoor' : 'gym';
-    const calendarDay = getCalendarProgramDay(userProfile.program_start_date);
-    const bifate = userProfile.current_day || 0;
+    const phase = getUserPhase(userProfile);
+    const { calendarDay, bifate, ramase } = phase;
 
-    if (calendarDay === null || calendarDay <= 0) {
-      // CAZ 1: Pre-program
+    if (phase.phase === 'pre_program') {
       dayContext = `
 
 =============================================
@@ -345,79 +345,113 @@ REGULĂ pentru această stare:
 - Nu da detalii despre exercițiile zilelor 1-14
 - Dacă întreabă "ce am azi" sau "ce am de făcut" → "Programul începe luni. Până atunci ai materialele de pregătire (calculul macronutrienților, lista de cumpărături, antrenamentul pregătitor). Le găsești în curs."
 - Întrebări despre macronutrienți, calorii, rețete (în pregătire pentru program) → răspunde normal din planul alimentar de sus.`;
-    } else if (calendarDay > 14 && bifate >= 14) {
-      // CAZ 2: Terminat real (USER A BIFAT TOATE 14 ZILELE)
+
+    } else if (phase.phase === 'terminat') {
+      // A bifat toate 12 antrenamentele — indiferent de ziua calendaristică.
       dayContext = `
 
 =============================================
-CONTEXT ZIUA CURENTĂ — POST-PROGRAM TERMINAT
+CONTEXT ZIUA CURENTĂ — PROGRAM TERMINAT
 =============================================
-Clientul a bifat toate 14 zile. Programul de inițiere s-a încheiat cu succes.
+Clientul a bifat toate cele 12 antrenamente. Programul PowerFit este încheiat.
 
 REGULĂ ABSOLUTĂ pentru această stare:
 
-Pentru ORICE întrebare despre alimentație post-program, antrenamente de continuare, plan menținere, "ce urmează", "cum continui", lean bulk, recompoziție, frecvență săptămânală post-program, calorii sau macronutrienți pentru perioada următoare — răspunzi EXACT și DOAR:
+Pentru ORICE întrebare despre alimentație post-program, antrenamente de continuare, plan de menținere, "ce urmează", "cum continui", lean bulk, recompoziție, frecvență săptămânală post-program, calorii sau macronutrienți pentru perioada următoare — răspunzi EXACT și DOAR:
 
-"Programul de 14 zile încheiat. Pentru continuare (alimentație, antrenamente, opțiuni): /coach."
+"Programul PowerFit este încheiat. Pentru pașii următori: /coach."
 
 Nu adăuga nimic înainte sau după.
 
-Pentru întrebări despre cele 14 zile deja terminate (ce a făcut, exerciții, rețete, principii din curs) — răspunde NORMAL din corpus.`;
-    } else if (calendarDay > 14 && bifate < 14) {
-      // CAZ 3: Recuperare post-calendar (calendar terminat, dar user n-a bifat 14)
-      const ramase = 14 - bifate;
-      const nextLogicDay = bifate + 1;
-      const nextDayText = formatDayForAI(nextLogicDay, equipment);
-      const daysOverdue = calendarDay - 14;
-      
+Pentru întrebări despre cele 14 zile deja parcurse (ce exerciții a făcut, rețete, principii din curs) — răspunde NORMAL din corpus.`;
+
+    } else if (phase.phase === 'expirat') {
+      // Calendarul a depășit ziua 44 — accesul s-a închis.
       dayContext = `
 
 =============================================
-CONTEXT ZIUA CURENTĂ — RECUPERARE POST-CALENDAR
+CONTEXT ZIUA CURENTĂ — ACCES EXPIRAT
 =============================================
-Clientul NU a terminat programul. Calendarul a depășit Z14, dar clientul are bifate doar ${bifate} antrenamente din 14.
-- Calendar a trecut acum ${daysOverdue} ${daysOverdue === 1 ? 'zi' : 'zile'}
-- Bifate: ${bifate}/14
-- Mai are ${ramase} antrenamente de făcut pentru a finaliza
-- Următorul antrenament logic dacă recuperează: Ziua ${nextLogicDay}
+Perioada de acces la program (14 zile program + 30 zile recuperare) s-a încheiat. Clientul nu a finalizat cele 12 antrenamente în acest interval.
+
+REGULĂ ABSOLUTĂ pentru această stare:
+
+Pentru ORICE întrebare, răspunzi EXACT și DOAR:
+
+"Perioada de acces la program s-a încheiat. Pentru reînnoire sau întrebări: /coach."
+
+Nu adăuga nimic înainte sau după. Nu da detalii despre antrenamente, rețete sau program.`;
+
+    } else if (phase.phase === 'recuperare') {
+      // Calendarul a trecut Z14, dar mai e fereastră de acces (zilele 15-44).
+      const nextWorkout = bifate + 1;          // al câtelea antrenament urmează
+      const nextProgramDay = workoutNumberToProgramDay(nextWorkout); // ziua de program
+      const nextDayText = nextProgramDay ? formatDayForAI(nextProgramDay, equipment) : '';
+
+      dayContext = `
+
+=============================================
+CONTEXT ZIUA CURENTĂ — FEREASTRĂ DE RECUPERARE
+=============================================
+Programul calendaristic de 14 zile s-a încheiat. Clientul este în fereastra de recuperare.
+- Antrenamente bifate: ${bifate} din 12
+- Antrenamente rămase: ${ramase}
+- Zile rămase până se închide accesul: ${phase.daysUntilAccessEnds}
+- Următorul antrenament de făcut: al ${nextWorkout}-lea (Ziua ${nextProgramDay} din program)
 
 REGULI STRICTE pentru această stare:
-- NU spune "felicitări că ai terminat" — nu a terminat
-- NU spune "programul s-a încheiat" ca felicitare
-- Dacă întreabă "ce am de făcut" → "Calendarul a expirat. Mai ai ${ramase} antrenamente nefăcute. Următorul: Ziua ${nextLogicDay}. Pentru rezultatul programului, le termini."
+- NU spune "felicitări că ai terminat" — clientul NU a terminat
+- NU spune "programul s-a încheiat cu succes"
+- Dacă întreabă "ce am de făcut" sau "care e următorul antrenament" → indică antrenamentul al ${nextWorkout}-lea (Ziua ${nextProgramDay}), folosind EXACT datele de mai jos
+- Poți menționa că mai are ${ramase} antrenamente și ${phase.daysUntilAccessEnds} zile de acces
 
---- ANTRENAMENTUL URMĂTOR LOGIC (Ziua ${nextLogicDay}) ---
+--- URMĂTORUL ANTRENAMENT DE RECUPERAT (Ziua ${nextProgramDay}) ---
 ${nextDayText}`;
-    } else {
-      // CAZ 4: Program normal în desfășurare (calendar 1-14)
-      const nextLogicDay = bifate < 14 ? bifate + 1 : null;
-      const calendarClamped = Math.min(calendarDay, 14);
 
-      const todayCalendarText = formatDayForAI(calendarClamped, equipment);
-      let logicText = '';
-      if (nextLogicDay !== null && nextLogicDay !== calendarClamped) {
-        logicText = `\n\n--- ZIUA URMĂTOARE LOGICĂ (dacă recuperează) ---\n${formatDayForAI(nextLogicDay, equipment)}`;
+    } else {
+      // phase === 'activ' — în interiorul celor 14 zile calendaristice.
+      const nextWorkout = bifate + 1;
+      const nextProgramDay = workoutNumberToProgramDay(nextWorkout);
+
+      // Ziua calendaristică de azi (pentru afișaj). Dacă azi e zi de odihnă, o spunem explicit.
+      const todayCalendarText = formatDayForAI(calendarDay, equipment);
+
+      // Antrenamentul pe care îl are de făcut (poate diferi de ziua calendaristică
+      // dacă a rămas în urmă). Îl arătăm doar dacă diferă de ziua de azi.
+      let nextWorkoutText = '';
+      if (nextProgramDay !== null && nextProgramDay !== calendarDay) {
+        nextWorkoutText = `\n\n--- URMĂTORUL ANTRENAMENT NEBIFAT (Ziua ${nextProgramDay}) ---\n${formatDayForAI(nextProgramDay, equipment)}`;
       }
 
       const workoutStatus = todayWorkout
-        ? `Clientul A FĂCUT DEJA antrenamentul de azi (Ziua ${todayWorkout.program_day || bifate}, dificultate ${todayWorkout.difficulty_rating}/5). NU îl trimite să facă încă unul.`
-        : `Clientul ÎNCĂ NU a făcut antrenamentul de azi.`;
+        ? `Clientul A FĂCUT DEJA antrenamentul de azi (dificultate ${todayWorkout.difficulty_rating}/5). NU îl trimite să facă încă unul azi.`
+        : `Clientul ÎNCĂ NU a bifat antrenament astăzi.`;
+
+      const restNote = phase.isRestDay
+        ? '\nAstăzi este ZI DE ODIHNĂ calendaristic (Ziua 7 sau 14). Clientul nu are antrenament de făcut azi — doar odihnă și plan alimentar.'
+        : '';
+
+      // "La zi" = a bifat cel puțin câte antrenamente sunt datorate la ziua de azi.
+      const datorate = expectedWorkoutsByDay(calendarDay);
+      const progresNote = bifate < datorate
+        ? `Clientul este în urmă față de calendar (${bifate} bifate, ${datorate} datorate la Ziua ${calendarDay}) — are antrenamente nebifate de recuperat.`
+        : `Clientul este la zi cu programul.`;
 
       dayContext = `
 
 =============================================
 CONTEXT ZIUA CURENTĂ (folosește DOAR aceste date)
 =============================================
-Astăzi calendaristic: Ziua ${calendarClamped}/14 din program.
-Bifate: ${bifate}/14.
-${bifate < calendarClamped ? `În urmă cu ${calendarClamped - bifate} zi/zile față de calendar.` : 'La zi cu programul.'}
+Astăzi calendaristic: Ziua ${calendarDay}/14 din program.
+Antrenamente bifate: ${bifate} din 12.
+${progresNote}${restNote}
 
 ${workoutStatus}
 
---- ZIUA CALENDARISTICĂ DE AZI ---
-${todayCalendarText}${logicText}
+--- ZIUA CALENDARISTICĂ DE AZI (Ziua ${calendarDay}) ---
+${todayCalendarText}${nextWorkoutText}
 
-REGULĂ STRICTĂ: pentru "ziua de azi" sau o zi din context, folosește EXACT informațiile de mai sus. Nu adăuga exerciții. Nu schimba seturile sau repetările.`;
+REGULĂ STRICTĂ: pentru "ziua de azi" sau orice zi din context, folosește EXACT informațiile de mai sus. Nu adăuga exerciții. Nu schimba seturile sau repetările. Vorbește despre zile ca "Ziua X/14".`;
     }
   }
 
