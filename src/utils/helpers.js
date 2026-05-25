@@ -77,6 +77,171 @@ export function getCalendarProgramDay(programStartDate) {
   const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
   return diffDays + 1;
 }
+
+// ============================================
+// SURSA UNICĂ DE ADEVĂR — FAZA USERULUI
+// ============================================
+// getUserPhase este SINGURUL loc unde se decide în ce fază e un user.
+// telegram.js, ai.js și cron.js o apelează — niciodată nu calculează faza local.
+// Astfel cele trei nu se pot contrazice: citesc aceeași funcție, primesc același rezultat.
+//
+// MODELUL "14 + 30":
+//   - Programul are 14 zile calendaristice. Zilele 7 și 14 = odihnă (nu se bifează).
+//   - Antrenamente reale de bifat: 12 (zilele 1-6, 8-13).
+//   - După Z14 calendaristic: 30 de zile fereastră de recuperare (zilele 15-44).
+//   - După ziua 44: acces expirat.
+//
+// CELE DOUĂ NUMERE — fiecare cu UN rol, niciodată amestecate:
+//   - calendarDay = ziua calendaristică (din program_start_date). Pentru afișaj "Ziua X/14".
+//   - bifate = antrenamente reale bifate (profile.current_day, 0-12). Pentru progres real.
+//
+// FAZE returnate (câmpul .phase):
+//   'pre_program' — programul nu a început (calendarDay <= 0 sau lipsă dată)
+//   'activ'       — calendarDay 1-14, mai are antrenamente de făcut
+//   'terminat'    — a bifat toate 12 antrenamentele (oricând, indiferent de calendar)
+//   'recuperare'  — calendarDay 15-44, încă are antrenamente nebifate
+//   'expirat'     — calendarDay > 44, încă are antrenamente nebifate (acces închis)
+
+export const TOTAL_WORKOUTS = 12;        // antrenamente reale (14 zile - 2 zile odihnă)
+export const PROGRAM_CALENDAR_DAYS = 14; // durata calendaristică a programului
+export const RECOVERY_WINDOW_DAYS = 30;  // fereastra de recuperare după Z14
+const LAST_ACCESS_DAY = PROGRAM_CALENDAR_DAYS + RECOVERY_WINDOW_DAYS; // ziua 44
+
+/**
+ * Determină faza curentă a unui user. Funcție pură — nu scrie nimic, nu apelează DB.
+ *
+ * @param {Object} profile - profilul userului (are nevoie de program_start_date și current_day)
+ * @returns {Object} obiect cu:
+ *   - phase: 'pre_program' | 'activ' | 'terminat' | 'recuperare' | 'expirat'
+ *   - calendarDay: number|null — ziua calendaristică (null dacă nu există dată de start)
+ *   - bifate: number — antrenamente reale bifate (0-12)
+ *   - ramase: number — antrenamente rămase de bifat (0-12)
+ *   - isRestDay: boolean — true dacă azi e zi calendaristică de odihnă (7 sau 14)
+ *   - daysUntilAccessEnds: number|null — zile rămase până expiră accesul (doar în faza recuperare)
+ */
+export function getUserPhase(profile) {
+  const calendarDay = getCalendarProgramDay(profile?.program_start_date);
+
+  // bifate = antrenamente reale bifate. Sanitizare: clamp în [0, TOTAL_WORKOUTS].
+  // Dacă current_day e null/undefined/negativ → 0. Dacă depășește 12 → 12.
+  let bifate = Number(profile?.current_day) || 0;
+  if (bifate < 0) bifate = 0;
+  if (bifate > TOTAL_WORKOUTS) bifate = TOTAL_WORKOUTS;
+  const ramase = TOTAL_WORKOUTS - bifate;
+
+  const finishedAll = bifate >= TOTAL_WORKOUTS;
+
+  // PRE-PROGRAM: programul nu a început încă (sau lipsă dată de start)
+  if (calendarDay === null || calendarDay <= 0) {
+    return {
+      phase: 'pre_program',
+      calendarDay,
+      bifate,
+      ramase,
+      isRestDay: false,
+      daysUntilAccessEnds: null,
+    };
+  }
+
+  // TERMINAT: a bifat toate 12 antrenamentele. Are prioritate peste calendar —
+  // un user care termină devreme e "terminat", indiferent ce zi calendaristică e.
+  if (finishedAll) {
+    return {
+      phase: 'terminat',
+      calendarDay,
+      bifate,
+      ramase: 0,
+      isRestDay: calendarDay === 7 || calendarDay === 14,
+      daysUntilAccessEnds: null,
+    };
+  }
+
+  // De aici încolo: finishedAll === false (mai are antrenamente de făcut).
+  const isRestDay = calendarDay === 7 || calendarDay === 14;
+
+  // ACTIV: în interiorul celor 14 zile calendaristice
+  if (calendarDay >= 1 && calendarDay <= PROGRAM_CALENDAR_DAYS) {
+    return {
+      phase: 'activ',
+      calendarDay,
+      bifate,
+      ramase,
+      isRestDay,
+      daysUntilAccessEnds: null,
+    };
+  }
+
+  // RECUPERARE: calendarul a trecut de Z14, dar mai sunt zile de acces (15-44)
+  if (calendarDay > PROGRAM_CALENDAR_DAYS && calendarDay <= LAST_ACCESS_DAY) {
+    return {
+      phase: 'recuperare',
+      calendarDay,
+      bifate,
+      ramase,
+      isRestDay: false, // în recuperare nu mai există zile de odihnă programate
+      daysUntilAccessEnds: LAST_ACCESS_DAY - calendarDay,
+    };
+  }
+
+  // EXPIRAT: calendarul a depășit ziua 44 și userul tot nu a terminat
+  return {
+    phase: 'expirat',
+    calendarDay,
+    bifate,
+    ramase,
+    isRestDay: false,
+    daysUntilAccessEnds: 0,
+  };
+}
+
+/**
+ * Mapează "al N-lea antrenament" la ziua de program corespunzătoare.
+ * Zilele 7 și 14 sunt odihnă (fără antrenament), deci numerotarea sare peste ele.
+ *
+ *   antrenament 1..6  → ziua 1..6
+ *   antrenament 7     → ziua 8   (sare peste ziua 7 = odihnă)
+ *   antrenament 8..12 → ziua 9..13
+ *
+ * @param {number} workoutNumber - al câtelea antrenament (1-12)
+ * @returns {number|null} ziua de program (1-13), sau null dacă workoutNumber e în afara 1-12
+ */
+export function workoutNumberToProgramDay(workoutNumber) {
+  const n = Number(workoutNumber);
+  if (!Number.isFinite(n) || n < 1 || n > TOTAL_WORKOUTS) return null;
+  // Primele 6 antrenamente = zilele 1-6. De la al 7-lea, se adaugă 1 (ziua 7 = odihnă).
+  return n <= 6 ? n : n + 1;
+}
+
+/**
+ * Câte antrenamente ar trebui să aibă bifate, la ÎNCEPUTUL zilei calendaristice X,
+ * un user care e "la zi". Antrenamentul zilei X se face ÎN cursul zilei X — deci
+ * la începutul zilei X sunt datorate doar antrenamentele zilelor anterioare (1..X-1).
+ *
+ *   ziua 1   → 0  (prima zi, nimic de făcut încă)
+ *   ziua 6   → 5  (zilele 1-5 făcute; ziua 6 se face azi)
+ *   ziua 7   → 6  (zilele 1-6; ziua 7 = odihnă)
+ *   ziua 8   → 6  (ziua 7 a fost odihnă, zero antrenament)
+ *   ziua 13  → 11
+ *   ziua 14  → 12 (toate; ziua 14 = odihnă)
+ *
+ * Folosit pentru a decide dacă un user e "în urmă" — bifate < datorate.
+ *
+ * @param {number} calendarDay - ziua calendaristică (1-14+)
+ * @returns {number} antrenamente datorate la începutul zilei (0-12)
+ */
+export function expectedWorkoutsByDay(calendarDay) {
+  const d = Number(calendarDay);
+  if (!Number.isFinite(d) || d < 1) return 0;
+  if (d > PROGRAM_CALENDAR_DAYS) return TOTAL_WORKOUTS; // după ziua 14 → toate 12
+  // Datorate = zile de antrenament în intervalul [1, d-1].
+  // Zilele de antrenament sunt 1-6 și 8-13 (7 și 14 = odihnă).
+  let count = 0;
+  for (let day = 1; day <= d - 1; day++) {
+    if (day !== 7 && day !== 14) count++;
+  }
+  return count;
+}
+
 export function getTimeWindow(hour) {
   if (hour >= 5 && hour < 10) {
     return {
