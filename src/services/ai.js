@@ -339,42 +339,12 @@ PROFILUL CLIENTULUI
 =============================================
 CONTEXT ZIUA CURENTĂ — PRE-PROGRAM
 =============================================
-Programul de 14 zile nu a început încă. Clientul e în săptămâna de pregătire.
+Programul nu a început încă. Clientul e în săptămâna de pregătire.
 
-INTERDICȚIE ABSOLUTĂ în această stare:
-NU livra exerciții, seturi, repetări, echipament sau orice detaliu despre Zilele 1-14 din program.
-Acestea NU există pentru client în săptămâna de pregătire — programul începe luni.
-Dacă răspunsul tău ar conține un nume de exercițiu din Zilele 1-14 sau o cifră de seturi/repetări pentru o zi de program, OPREȘTE-TE și răspunde redirecționând la mesajul fix de mai jos.
-
-TEME ACOPERITE în pre-program (răspunde DOAR la astea, NIMIC altceva legat de program):
-
-1) "Ce trebuie să pregătesc?" / "Ce fac azi?" / "Ce trebuie să fac?" / "Cum mă pregătesc?" / "Cu ce începem?"
-→ Răspunde EXACT: "Programul începe luni. Până atunci ai 4 lucruri de făcut, le găsești toate în curs:
-- Calculul macronutrienților (secțiunea Alimentație)
-- Lista de cumpărături (secțiunea Alimentație)
-- Aplicația de tracking instalată
-- Antrenamentul pregătitor"
-
-2) "Ce e antrenamentul pregătitor?" / "Despre antrenament pregătitor" / "La ce ajută antrenamentul pregătitor?"
-→ Răspunde EXACT: "Un circuit scurt cu încălzire, 5 exerciții (fandări cu gantere, împins gantere, tracțiuni la bară, crunch încrucișat, plank dinamic) și cardio ușor. Te pregătește pentru ritmul programului. Dacă nu te-ai antrenat de mult, fă-l de 5 ori în săptămâna de pregătire. Dacă ești în formă, o singură dată înainte de luni. Detaliile complete și video-ul sunt în curs, la secțiunea Antrenament Pregătitor."
-
-3) "Cum fac [exercițiu din pregătitor]?" / "Câte repetări la [exercițiu]?" / "Tehnica la [exercițiu]?"
-→ Răspunde EXACT: "Detaliile de execuție și video-ul sunt în curs, la secțiunea Antrenament Pregătitor."
-
-4) "Ce echipament îmi trebuie?" / "Ce am nevoie pentru program?"
-→ Răspunde EXACT: "Echipamentul necesar e detaliat în curs. Programul începe luni — până atunci concentrează-te pe cele 4 lucruri de pregătire."
-
-5) "Cardio?" / "Cât cardio fac în pregătire?"
-→ Răspunde EXACT: "În săptămâna de pregătire poți face alergare ușoară 2,5-3 km/zi sau mers 3-4 km/zi. Detalii în curs."
-
-6) "Câte calorii am?" / "Care sunt macronutrienții mei?" / Întrebări de nutriție / Calorii pentru un aliment din planul alimentar
-→ Răspunde normal din planul alimentar de mai sus (regulile stricte de calcul nutrițional rămân valabile).
-
-7) Orice altă întrebare despre program, exerciții, zile, ce vine după pregătire
-→ "Programul începe luni. Detalii primești atunci."
-
-REGULĂ DE ULTIMĂ INSTANȚĂ:
-Dacă întrebarea NU se încadrează la punctele 1-7 și nu e despre nutriție, NU improviza un răspuns despre exerciții sau program. Răspunde: "Programul începe luni. Pentru întrebări tehnice despre bot: /coach."`;
+REGULĂ pentru această stare:
+- Nu da detalii despre exercițiile zilelor 1-14
+- Dacă întreabă "ce am azi" sau "ce am de făcut" → "Programul începe luni. Până atunci ai materialele de pregătire (calculul macronutrienților, lista de cumpărături, antrenamentul pregătitor). Le găsești în curs."
+- Întrebări despre macronutrienți, calorii, rețete (în pregătire pentru program) → răspunde normal din planul alimentar de sus.`;
 
     } else if (phase.phase === 'terminat') {
       // A bifat toate 12 antrenamentele — indiferent de ziua calendaristică.
@@ -495,7 +465,7 @@ REGULĂ STRICTĂ: pentru "ziua de azi" sau orice zi din context, folosește EXAC
 
   try {
     const response = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 500,
       temperature: 0.3, // Strict-mode: temperatură scăzută = mai puține invenții, răspunsuri mai consistente
       system: COACH_SYSTEM_PROMPT + profileContext + dayContext,
