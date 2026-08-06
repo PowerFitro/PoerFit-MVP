@@ -1,4 +1,5 @@
 import * as db from '../db/supabase.js';
+import { computeNutrition } from '../utils/helpers.js';
 
 // Calculate next Monday from today
 function getNextMonday() {
@@ -174,20 +175,13 @@ export async function registerRoutes(app) {
 }
 
 // ============================================
-// CALORIE CALCULATOR (Mifflin-St Jeor simplified)
+// CALORIE TARGET — deleagă la computeNutrition (sursă unică)
 // ============================================
 
 function calculateCalorieTarget(data) {
-  const { sex, weight_kg } = data;
-  if (!weight_kg) return 1600;
-
-  if (sex === 'male') {
-    if (weight_kg > 100) return 2000;
-    if (weight_kg >= 80) return 1750;
-    return 1650;
-  } else {
-    if (weight_kg > 85) return 1600;
-    if (weight_kg >= 65) return 1450;
-    return 1300;
-  }
+  // Aceeași funcție ca botul (helpers.computeNutrition). Stocăm ziua mare ca
+  // daily_calorie_target; botul recalculează identic din sex + greutate, deci
+  // onboarding-ul și botul nu se mai pot contrazice.
+  const n = computeNutrition(data.sex, data.weight_kg);
+  return n ? n.highDayKcal : 1600; // fallback dacă lipsește greutatea
 }
