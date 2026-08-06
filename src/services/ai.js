@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { formatDayForAI, getProgramDay } from '../data/program.js';
-import { getUserPhase, workoutNumberToProgramDay, expectedWorkoutsByDay } from '../utils/helpers.js';
+import { getUserPhase, workoutNumberToProgramDay, expectedWorkoutsByDay, computeNutrition } from '../utils/helpers.js';
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -150,34 +150,24 @@ PROGRAMUL POWERFIT — STRUCTURĂ
 - Detaliile complete ale zilei curente vin în secțiunea "CONTEXT ZIUA CURENTĂ" de mai jos
 
 =============================================
-NUTRIȚIE — APORT CALORIC PE CATEGORII
+NUTRIȚIE — APORT CALORIC ȘI MACRONUTRIENȚI
 =============================================
 
-BĂRBAȚI:
-- 70-80 kg: 4 zile/săpt 1600-1700 kcal + 3 zile/săpt 1450 kcal
-- 80-100 kg: 4 zile/săpt 1700-1850 kcal + 3 zile/săpt 1550 kcal
-- Peste 100 kg: 5 zile/săpt 2000 kcal + 2 zile/săpt 1800 kcal
+Valorile calorice și macronutrienții fiecărui client sunt calculate exact și livrate în
+context, în blocul "NUTRIȚIE CALCULATĂ PENTRU ACEST CLIENT". Folosește EXCLUSIV cifrele de
+acolo. NU calcula tu calorii, proteine, grăsimi sau carbohidrați. NU folosi formule. NU
+rotunji și nu inventa valori. Dacă blocul lipsește din context, cere clientul să reia
+întrebarea sau redirecționează la /coach — nu improviza cifre.
 
-FEMEI:
-- Sub 65 kg: 5 zile/săpt 1300 kcal + 2 zile/săpt 1100 kcal
-- 65-85 kg: 4 zile/săpt 1450 kcal + 3 zile/săpt 1250 kcal
-- Peste 85 kg: 4 zile/săpt 1600 kcal + 3 zile/săpt 1400 kcal
-
-REGULI:
-- Zilele cu aport mai mare = zilele de antrenament
-- Zilele cu aport mai mic = zilele de repaus
-- Proteinele și grăsimile rămân constante; doar carbohidrații variază
+REGULI GENERALE:
+- Structura săptămânii: 5 zile standard (zilele de antrenament) + 2 zile reduse (repaus)
+- Proteinele și grăsimile sunt identice în toate zilele; doar carbohidrații diferă între ziua standard și ziua redusă
 - Alimentele se cântăresc CRUDE (înainte de gătire)
 - Apă: 250-280 ml per 10 kg greutate corporală/zi
 
-MACRONUTRIENȚI (pentru recompoziție):
-- Proteine: 2.2-2.4 g/kg masă slabă
-- Grăsimi: 0.8-1 g/kg masă slabă
-- Carbohidrați: completează restul caloriilor
-
-CONVERSIE: 1g proteine = 4 kcal | 1g carbohidrați = 4 kcal | 1g grăsimi = 9 kcal
-
-CALCUL MASĂ SLABĂ: Greutate × (1 - procent_grăsime). Ex: 80kg cu 20% grăsime → 80 × 0.80 = 64kg masă slabă.
+Dacă în blocul din context sunt doar caloriile (clientul nu a declarat procentul de grăsime
+corporală), dă aportul caloric — zi standard / zi redusă — și cere-i procentul de grăsime înainte de
+a da macronutrienți. Nu presupune un procent, nu calcula tu masa slabă.
 
 SUPLIMENTE RECOMANDATE ÎN PROGRAM (singurele):
 - Fibre: 20-30 g/zi
@@ -296,6 +286,7 @@ REGULI FINALE DE COMPORTAMENT
 - Înlocuire aliment → propune alt aliment DIN LISTA DE ALIMENTE cu profil macro similar. Direct, fără preambul.
 - Calorii/macro pentru un aliment care NU e în corpus (șaorma, pizza, fast-food etc.) → NU inventa cifre. Răspunde: "Calculez doar pentru alimentele din planul PowerFit. Pentru altceva, cântărește ingredientele de bază și raportează-le individual, sau scrie /coach."
 - Cantitate vagă ("niște", "o porție") → cere grame exacte, nu presupune.
+- Întrebare despre aportul caloric sau macronutrienții PERSONALI ("câte calorii am", "care sunt macrourile mele") → citește EXCLUSIV din blocul "NUTRIȚIE CALCULATĂ PENTRU ACEST CLIENT" din context. Dă aportul zi standard / zi redusă. Pentru macro: dacă clientul a declarat procentul de grăsime, citește rândul cel mai apropiat din tabel; dacă nu l-a declarat, cere-i-l scurt înainte. NU calcula nimic tu, NU folosi formule, NU inventa cifre.
 - Cere să vorbească cu Sam → "/coach."
 - Politețuri ("mulțumesc", "salut") → constatare scurtă + redirect la program. Fără răspuns la politețe.
 - Orice altceva (politică, relații, alte diete, alte programe, suplimente nelistate, exerciții în afara programului, alte sporturi, opinii personale, întrebări filozofice, cultură generală) → refuz standard (vezi REGULA ABSOLUTĂ).`;
@@ -319,6 +310,46 @@ PROFILUL CLIENTULUI
 - Echipament: ${userProfile.equipment === 'gym' ? 'sală' : 'aer liber'}
 - Obiectiv: ${userProfile.goal === 'fat_loss' ? 'Pierdere grăsime' : userProfile.goal === 'toning' ? 'Tonifiere' : 'Masă musculară'}
 - Restricții alimentare: ${userProfile.dietary_restrictions?.join(', ') || 'Niciuna'}` : '';
+
+  // ============================================
+  // NUTRIȚIE CALCULATĂ — injectată în context, calculată în COD (nu de LLM)
+  // ============================================
+  // computeNutrition e sursa unică (aceeași funcție ca la onboarding). Botul
+  // primește cifrele gata calculate și doar le citește — zero aritmetică în model.
+  // Caloriile depind doar de sex + greutate (din profil). Macronutrienții depind
+  // de procentul de grăsime (îl dă clientul în chat), deci injectăm un tabel
+  // precalculat pe procente uzuale; botul citește rândul cel mai apropiat.
+  let nutritionContext = '';
+  if (userProfile && userProfile.weight_kg) {
+    const cal = computeNutrition(userProfile.sex, userProfile.weight_kg);
+    if (cal) {
+      const fatSteps = [10, 15, 20, 25, 30, 35, 40, 45];
+      const rows = fatSteps.map(bf => {
+        const m = computeNutrition(userProfile.sex, userProfile.weight_kg, bf);
+        return `${String(bf).padStart(2)}%  | ${m.leanMassKg} kg | ${m.proteinG} g | ${m.fatG} g | ${m.carbsHighG} g | ${m.carbsLowG} g`;
+      }).join('\n');
+
+      nutritionContext = `
+
+=============================================
+NUTRIȚIE CALCULATĂ PENTRU ACEST CLIENT (folosește EXACT aceste cifre — NU calcula tu)
+=============================================
+Greutate: ${userProfile.weight_kg} kg. Cifrele sunt exacte; nu le recalcula, nu le rotunji, nu inventa altele.
+
+APORT CALORIC:
+- Zi standard (antrenament): ${cal.highDayKcal} kcal
+- Zi redusă (repaus): ${cal.lowDayKcal} kcal
+- Structură: 5 zile standard + 2 zile reduse pe săptămână.
+
+MACRONUTRIENȚI după procentul de grăsime corporală (proteinele și grăsimile sunt identice în toate zilele; doar carbohidrații diferă):
+grăsime | masă slabă | proteine | grăsimi | carbo zi standard | carbo zi redusă
+${rows}
+
+CUM FOLOSEȘTI TABELUL:
+- Clientul declară procentul de grăsime → alege rândul cel mai apropiat și citește valorile. NU interpola, NU calcula.
+- Clientul NU a declarat procentul → dă doar aportul caloric (zi standard / zi redusă) și cere-i procentul de grăsime înainte de a da macro. Nu presupune un procent.`;
+    }
+  }
 
   // Construim contextul zilei curente — sursa de adevăr pentru AI.
   // Faza vine din getUserPhase (helpers.js) — ACEEAȘI funcție folosită de
@@ -468,7 +499,7 @@ REGULĂ STRICTĂ: pentru "ziua de azi" sau orice zi din context, folosește EXAC
       model: 'claude-sonnet-4-6',
       max_tokens: 500,
       temperature: 0.3, // Strict-mode: temperatură scăzută = mai puține invenții, răspunsuri mai consistente
-      system: COACH_SYSTEM_PROMPT + profileContext + dayContext,
+      system: COACH_SYSTEM_PROMPT + profileContext + nutritionContext + dayContext,
       messages: messages.slice(-10) // Ultimele 10 mesaje pentru context
     });
 
