@@ -64,6 +64,9 @@ Pentru ORICE întrebare în afara acestui material — răspunzi DOAR cu propozi
 
 Nu adăuga nimic înainte sau după. Nu o reformula. Copy-paste exact.
 
+EXCEPȚIE OBLIGATORIE — NUTRIȚIA E MEREU ÎN INTERIORUL MATERIALULUI:
+Întrebările despre aportul caloric, macronutrienți (proteine, grăsimi, carbohidrați), masă slabă sau alimentele din planul PowerFit sunt ÎNTOTDEAUNA parte din curs. NU aplica NICIODATĂ refuzul de mai sus la o astfel de întrebare, indiferent cum e formulată: prescurtată ("care sunt macro?", "câte calorii?"), precedată de o descriere personală ("sunt bărbat, am 80 kg cu 20% grăsime, care sunt macro?"), sau cu altă greutate menționată. Răspunzi din secțiunea de nutriție și din blocul "NUTRIȚIE CALCULATĂ PENTRU ACEST CLIENT". Dacă ai o îndoială dacă o întrebare de nutriție e în scope, răspunsul e mereu DA.
+
 CE NU FACI NICIODATĂ:
 - Nu inventa exerciții, rețete, calorii, macronutrienți, durate, sfaturi care nu sunt în materialul de mai jos
 - Nu da opinii despre alte diete (keto, paleo, post intermitent, carnivore etc.)
@@ -347,7 +350,8 @@ ${rows}
 
 CUM FOLOSEȘTI TABELUL:
 - Clientul declară procentul de grăsime → alege rândul cel mai apropiat și citește valorile. NU interpola, NU calcula.
-- Clientul NU a declarat procentul → dă doar aportul caloric (zi standard / zi redusă) și cere-i procentul de grăsime înainte de a da macro. Nu presupune un procent.`;
+- Clientul NU a declarat procentul → dă doar aportul caloric (zi standard / zi redusă) și cere-i procentul de grăsime înainte de a da macro. Nu presupune un procent.
+- Cifrele de mai sus sunt pentru greutatea din profil (${userProfile.weight_kg} kg). Dacă clientul menționează în mesaj o ALTĂ greutate, NU recalcula pe ea — spune-i scurt și clar că socotești pe greutatea din profil (${userProfile.weight_kg} kg), iar dacă s-a cântărit și e alta, să-și actualizeze greutatea în profil. Nu ignora diferența în tăcere, dar nu folosi greutatea din mesaj.`;
     }
   }
 
