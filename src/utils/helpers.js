@@ -351,3 +351,94 @@ STATUS ANTRENAMENT AZI:
 ${workoutLine}
 `;
 }
+
+// ============================================
+// NUTRIȚIE — SURSĂ UNICĂ DE CALCUL (determinist)
+// ============================================
+// computeNutrition este SINGURUL loc unde se calculează aportul caloric și
+// macronutrienții. Funcție pură: aceleași intrări → aceleași ieșiri, mereu.
+// Apelată de routes.js (onboarding) ȘI de ai.js (context bot) — cele două nu se
+// mai pot contrazice, fiindcă rulează exact aceeași funcție.
+//
+// MODELUL (validat pe cifrele PowerFit):
+//   Caloriile depind DOAR de sex + greutate (NU de grăsime).
+//   Ziua mare = funcție continuă, liniară pe segmente de greutate.
+//   Ziua mică = ziua mare − 200 kcal (diferențial constant).
+//   Structura săptămânii: 5 zile mari + 2 zile mici.
+//
+//   BĂRBAȚI, ziua mare (kcal), continuu:
+//     ≤60 kg → 1500 (prag inferior)
+//     60-70  → 1500…1600
+//     70-80  → 1600…1700
+//     80-100 → 1700…1850
+//     100-110→ 1850…2000 (rampă)
+//     >110   → 2000 (prag superior)
+//   FEMEI, ziua mare (kcal), continuu:
+//     ≤65 kg → 1300 (prag inferior)
+//     65-85  → 1300…1600
+//     >85    → 1600 (prag superior)
+//
+// MACRONUTRIENȚI (doar dacă se dă procentul de grăsime corporală):
+//   Masă slabă = greutate × (1 − grăsime%/100)
+//   Proteine = 2.4 g/kg masă slabă (capăt sus — protejează mușchiul în deficit)
+//   Grăsimi  = 0.9 g/kg masă slabă
+//   Carbohidrați = restul caloriilor, calculat SEPARAT pentru ziua mare și mică.
+//   Proteinele și grăsimile sunt identice în toate zilele; doar carbohidrații diferă.
+
+/**
+ * Calculează aportul caloric (și macronutrienții, dacă e dat procentul de grăsime).
+ * Funcție pură — nu scrie nimic, nu apelează DB, nu inventează.
+ *
+ * @param {string} sex - 'male' sau 'female'
+ * @param {number} weightKg - greutatea corporală în kg
+ * @param {number|null} bodyFatPct - procent grăsime corporală (ex: 20 pentru 20%). Opțional.
+ * @returns {Object|null} null dacă greutatea lipsește/e invalidă. Altfel:
+ *   { highDayKcal, lowDayKcal } — mereu.
+ *   + { bodyFatPct, leanMassKg, proteinG, fatG, carbsHighG, carbsLowG } — dacă grăsimea e validă (3-60%).
+ */
+export function computeNutrition(sex, weightKg, bodyFatPct = null) {
+  const w = Number(weightKg);
+  if (!Number.isFinite(w) || w <= 0) return null;
+  const isMale = sex === 'male';
+
+  // --- ZIUA MARE: funcție continuă, liniară pe segmente ---
+  let highDay;
+  if (isMale) {
+    if (w <= 60) highDay = 1500;
+    else if (w <= 70) highDay = 1500 + (w - 60) * 10;    // 1500 → 1600
+    else if (w <= 80) highDay = 1600 + (w - 70) * 10;    // 1600 → 1700
+    else if (w <= 100) highDay = 1700 + (w - 80) * 7.5;  // 1700 → 1850
+    else if (w <= 110) highDay = 1850 + (w - 100) * 15;  // 1850 → 2000 (rampă)
+    else highDay = 2000;
+  } else {
+    if (w <= 65) highDay = 1300;
+    else if (w <= 85) highDay = 1300 + (w - 65) * 15;    // 1300 → 1600
+    else highDay = 1600;
+  }
+
+  // Rotunjire la 10 kcal — cifre curate pentru client, fără să pierdem gradientul.
+  highDay = Math.round(highDay / 10) * 10;
+  const lowDay = highDay - 200;
+
+  const result = { highDayKcal: highDay, lowDayKcal: lowDay };
+
+  // --- MACRONUTRIENȚI: doar dacă procentul de grăsime e prezent și plauzibil ---
+  const bf = Number(bodyFatPct);
+  if (Number.isFinite(bf) && bf >= 3 && bf <= 60) {
+    const lean = w * (1 - bf / 100);
+    const proteinG = Math.round(lean * 2.4);
+    const fatG = Math.round(lean * 0.9);
+    // Carbohidrații = restul caloriilor. Clamp la 0 ca să nu iasă negativ la
+    // cazuri extreme (foarte slab + foarte greu). Pentru publicul-țintă nu apare.
+    const carbsHighG = Math.max(0, Math.round((highDay - proteinG * 4 - fatG * 9) / 4));
+    const carbsLowG = Math.max(0, Math.round((lowDay - proteinG * 4 - fatG * 9) / 4));
+    result.bodyFatPct = bf;
+    result.leanMassKg = Math.round(lean * 10) / 10;
+    result.proteinG = proteinG;
+    result.fatG = fatG;
+    result.carbsHighG = carbsHighG;
+    result.carbsLowG = carbsLowG;
+  }
+
+  return result;
+}
