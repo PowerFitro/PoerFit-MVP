@@ -417,23 +417,28 @@ export function computeNutrition(sex, weightKg, bodyFatPct = null) {
   }
 
   // Rotunjire la 10 kcal — cifre curate pentru client, fără să pierdem gradientul.
-  highDay = Math.round(highDay / 10) * 10;
+  highDay = roundHalfUp(highDay / 10) * 10;
   const lowDay = highDay - 200;
 
   const result = { highDayKcal: highDay, lowDayKcal: lowDay };
 
   // --- MACRONUTRIENȚI: doar dacă procentul de grăsime e prezent și plauzibil ---
+  // Aceiași pași și aceleași rotunjiri ca în fișierul Excel al cursului și în
+  // calculatorul din lecție (curs.powerfitro.com): grăsimea în kg și masa slabă
+  // se rotunjesc la o zecimală ÎNAINTE de a calcula gramele. Astfel botul,
+  // Excel-ul și calculatorul dau aceleași cifre, la gram.
   const bf = Number(bodyFatPct);
   if (Number.isFinite(bf) && bf >= 3 && bf <= 60) {
-    const lean = w * (1 - bf / 100);
-    const proteinG = Math.round(lean * 2.4);
-    const fatG = Math.round(lean * 0.9);
+    const fatMassKg = roundHalfUp((w * bf) / 100 * 10) / 10;
+    const lean = roundHalfUp((w - fatMassKg) * 10) / 10;
+    const proteinG = roundHalfUp(lean * 2.4);
+    const fatG = roundHalfUp(lean * 0.9);
     // Carbohidrații = restul caloriilor. Clamp la 0 ca să nu iasă negativ la
     // cazuri extreme (foarte slab + foarte greu). Pentru publicul-țintă nu apare.
-    const carbsHighG = Math.max(0, Math.round((highDay - proteinG * 4 - fatG * 9) / 4));
-    const carbsLowG = Math.max(0, Math.round((lowDay - proteinG * 4 - fatG * 9) / 4));
+    const carbsHighG = Math.max(0, roundHalfUp((highDay - proteinG * 4 - fatG * 9) / 4));
+    const carbsLowG = Math.max(0, roundHalfUp((lowDay - proteinG * 4 - fatG * 9) / 4));
     result.bodyFatPct = bf;
-    result.leanMassKg = Math.round(lean * 10) / 10;
+    result.leanMassKg = lean;
     result.proteinG = proteinG;
     result.fatG = fatG;
     result.carbsHighG = carbsHighG;
@@ -441,4 +446,98 @@ export function computeNutrition(sex, weightKg, bodyFatPct = null) {
   }
 
   return result;
+}
+
+// Rotunjire obișnuită la întreg (jumătatea în sus), fără surprizele zecimalelor
+// binare (ex. 64.05 * 10 = 640.4999… în JavaScript).
+function roundHalfUp(x) {
+  return Math.round(Number(x.toFixed(6)));
+}
+
+// ============================================
+// GREUTATE ȘI PROCENT DE GRĂSIME SPUSE DE CLIENT ÎN CHAT
+// ============================================
+// Clientul poate scrie în mesaj o greutate diferită de cea din profil
+// ("am 80 kg, 20% grăsime"). Cifrele se extrag AICI, în cod, cu reguli fixe —
+// nu de către model — iar calculul rămâne în computeNutrition.
+//
+// Reguli prudente, ca să nu confundăm greutatea corporală cu altceva:
+//  - greutate: un număr între 40 și 200 urmat de kg / kilograme / kile;
+//  - nu se ia un număr care este o țintă ("vreau să ajung la 75 kg", "să slăbesc 10 kg");
+//  - nu se ia din mesaje despre greutăți de antrenament ("genuflexiuni cu 80 kg"),
+//    decât dacă în același mesaj apare și procentul de grăsime;
+//  - fără procent în mesaj, greutatea se ia doar dacă mesajul vorbește despre
+//    corp sau despre nutriție ("cântăresc", "greutatea mea", "am … kg", "calorii", "macro");
+//  - procent de grăsime: un număr între 5 și 60 urmat de % / "la sută" / "procente",
+//    doar dacă mesajul pomenește grăsimea, conține și greutatea corporală,
+//    sau este un răspuns scurt de tipul "20%".
+
+const KG_NUMBER = /(\d{2,3}(?:[.,]\d{1,2})?)\s*(?:de\s+)?(?:kg|kilograme|kilogram|kile|kilo)(?![a-zăâîșț])/g;
+const PCT_NUMBER = /(\d{1,2}(?:[.,]\d{1,2})?)\s*(?:%|la\s+sut[ăa]|procente?)/g;
+const TARGET_BEFORE = /(ajung[ei]?\s+la|[țt]int[ăa]|obiectiv|sl[ăa]besc|sl[ăa]bi|dau\s+jos|pierd|scad|p[âa]n[ăa]\s+la)[^.!?\d]{0,25}$/;
+const LOAD_WORDS = /genuflex|[îi]mpins|ramat|[îi]ndrept|trac[țt]iun|flot[ăa]r|pres[ăa](?![a-zăâîșț])|bar[ăa](?![a-zăâîșț])|halter|ganter|kettlebell|repet[ăa]r|\bseturi?\b|ridic/;
+const BODY_WORDS = /c[âa]nt[ăa]r|greutat|\bam\b|\bsunt\b/;
+const NUTRITION_WORDS = /calori|kcal|macro|protein|carbo|gr[ăa]sim|aport|m[ăa]n[âa]nc|nutri/;
+const FAT_WORDS = /gr[ăa]sim|adipos|body\s*fat|\bbf\b/;
+const SHORT_PCT_REPLY = /^\s*(?:am\s+|cam\s+|aproximativ\s+|circa\s+|vreo\s+)?\d{1,2}(?:[.,]\d{1,2})?\s*(?:%|la\s+sut[ăa]|procente?)\s*[.!]?\s*$/;
+
+const toNumber = (s) => Number(String(s).replace(',', '.'));
+
+/**
+ * Extrage dintr-un singur mesaj greutatea corporală și procentul de grăsime,
+ * dacă sunt spuse limpede. Funcție pură.
+ * @param {string} text
+ * @returns {{ weightKg: number|null, bodyFatPct: number|null }}
+ */
+export function parseBodyNumbers(text) {
+  const out = { weightKg: null, bodyFatPct: null };
+  if (typeof text !== 'string' || !text.trim()) return out;
+  const t = text.toLowerCase();
+
+  // --- candidați pentru greutate ---
+  let weight = null;
+  for (const m of t.matchAll(KG_NUMBER)) {
+    const value = toNumber(m[1]);
+    if (!(value >= 40 && value <= 200)) continue;
+    if (TARGET_BEFORE.test(t.slice(0, m.index))) continue;
+    weight = value;
+    break;
+  }
+
+  // --- candidați pentru procentul de grăsime ---
+  let pct = null;
+  for (const m of t.matchAll(PCT_NUMBER)) {
+    const value = toNumber(m[1]);
+    if (!(value >= 5 && value <= 60)) continue;
+    pct = value;
+    break;
+  }
+  const pctIsBodyFat = pct !== null && (FAT_WORDS.test(t) || weight !== null || SHORT_PCT_REPLY.test(t));
+  if (pctIsBodyFat) out.bodyFatPct = pct;
+
+  if (weight !== null) {
+    const aboutBody = BODY_WORDS.test(t) || NUTRITION_WORDS.test(t);
+    if (out.bodyFatPct !== null || (!LOAD_WORDS.test(t) && aboutBody)) out.weightKg = weight;
+  }
+  return out;
+}
+
+/**
+ * Caută în conversație (de la cel mai nou mesaj al clientului spre cele vechi)
+ * ultima greutate corporală și ultimul procent de grăsime spuse de client.
+ * @param {Array<{role: string, content: string}>} messages - în ordine cronologică
+ * @returns {{ weightKg: number|null, bodyFatPct: number|null }}
+ */
+export function findStatedBodyNumbers(messages) {
+  const out = { weightKg: null, bodyFatPct: null };
+  if (!Array.isArray(messages)) return out;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (!msg || msg.role !== 'user') continue;
+    const found = parseBodyNumbers(msg.content);
+    if (out.weightKg === null && found.weightKg !== null) out.weightKg = found.weightKg;
+    if (out.bodyFatPct === null && found.bodyFatPct !== null) out.bodyFatPct = found.bodyFatPct;
+    if (out.weightKg !== null && out.bodyFatPct !== null) break;
+  }
+  return out;
 }
