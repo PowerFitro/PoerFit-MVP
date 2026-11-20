@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { formatDayForAI, getProgramDay } from '../data/program.js';
-import { getUserPhase, workoutNumberToProgramDay, expectedWorkoutsByDay, computeNutrition } from '../utils/helpers.js';
+import { getUserPhase, workoutNumberToProgramDay, expectedWorkoutsByDay, computeNutrition, findStatedBodyNumbers } from '../utils/helpers.js';
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -289,7 +289,7 @@ REGULI FINALE DE COMPORTAMENT
 - Înlocuire aliment → propune alt aliment DIN LISTA DE ALIMENTE cu profil macro similar. Direct, fără preambul.
 - Calorii/macro pentru un aliment care NU e în corpus (șaorma, pizza, fast-food etc.) → NU inventa cifre. Răspunde: "Calculez doar pentru alimentele din planul PowerFit. Pentru altceva, cântărește ingredientele de bază și raportează-le individual, sau scrie /coach."
 - Cantitate vagă ("niște", "o porție") → cere grame exacte, nu presupune.
-- Întrebare despre aportul caloric sau macronutrienții PERSONALI ("câte calorii am", "care sunt macrourile mele") → citește EXCLUSIV din blocul "NUTRIȚIE CALCULATĂ PENTRU ACEST CLIENT" din context. Dă aportul zi standard / zi redusă. Pentru macro: dacă clientul a declarat procentul de grăsime, citește rândul cel mai apropiat din tabel; dacă nu l-a declarat, cere-i-l scurt înainte. NU calcula nimic tu, NU folosi formule, NU inventa cifre.
+- Întrebare despre aportul caloric sau macronutrienții PERSONALI ("câte calorii am", "care sunt macrourile mele") → citește EXCLUSIV din blocul "NUTRIȚIE CALCULATĂ PENTRU ACEST CLIENT" din context. Dă aportul zi standard / zi redusă. Pentru macro: dacă în context există blocul „CALCUL EXACT”, dă cifrele de acolo; altfel, dacă clientul a declarat procentul de grăsime, citește rândul cel mai apropiat din tabel; dacă nu l-a declarat, cere-i-l scurt înainte. NU calcula nimic tu, NU folosi formule, NU inventa cifre.
 - Cere să vorbească cu Sam → "/coach."
 - Politețuri ("mulțumesc", "salut") → constatare scurtă + redirect la program. Fără răspuns la politețe.
 - Orice altceva (politică, relații, alte diete, alte programe, suplimente nelistate, exerciții în afara programului, alte sporturi, opinii personale, întrebări filozofice, cultură generală) → refuz standard (vezi REGULA ABSOLUTĂ).`;
@@ -322,36 +322,70 @@ PROFILUL CLIENTULUI
   // Caloriile depind doar de sex + greutate (din profil). Macronutrienții depind
   // de procentul de grăsime (îl dă clientul în chat), deci injectăm un tabel
   // precalculat pe procente uzuale; botul citește rândul cel mai apropiat.
+  //
+  // Greutatea folosită: cea spusă de client în conversație (dacă a scris-o
+  // limpede, ex. "am 80 kg, 20%"), altfel cea din profil. Cifrele din mesaj
+  // sunt extrase în COD (findStatedBodyNumbers), nu de model. Dacă a spus și
+  // procentul de grăsime, primește un calcul exact pe datele lui — aceleași
+  // cifre ca în calculatorul din lecție și în fișierul Excel.
   let nutritionContext = '';
   if (userProfile && userProfile.weight_kg) {
-    const cal = computeNutrition(userProfile.sex, userProfile.weight_kg);
+    const stated = findStatedBodyNumbers([
+      ...(conversationHistory || []),
+      { role: 'user', content: userMessage }
+    ]);
+    const profileWeight = Number(userProfile.weight_kg);
+    const weight = stated.weightKg ?? profileWeight;
+    const weightDiffers = stated.weightKg !== null && Math.abs(stated.weightKg - profileWeight) >= 0.05;
+    const cal = computeNutrition(userProfile.sex, weight);
     if (cal) {
       const fatSteps = [10, 15, 20, 25, 30, 35, 40, 45];
       const rows = fatSteps.map(bf => {
-        const m = computeNutrition(userProfile.sex, userProfile.weight_kg, bf);
+        const m = computeNutrition(userProfile.sex, weight, bf);
         return `${String(bf).padStart(2)}%  | ${m.leanMassKg} kg | ${m.proteinG} g | ${m.fatG} g | ${m.carbsHighG} g | ${m.carbsLowG} g`;
       }).join('\n');
+
+      const exact = stated.bodyFatPct !== null
+        ? computeNutrition(userProfile.sex, weight, stated.bodyFatPct)
+        : null;
+      const exactBlock = exact && exact.proteinG !== undefined ? `
+
+CALCUL EXACT pe datele spuse de client (${weight} kg, ${exact.bodyFatPct}% grăsime corporală) — dă-i ACESTE cifre:
+- Masă slabă: ${exact.leanMassKg} kg
+- Proteine: ${exact.proteinG} g
+- Grăsimi: ${exact.fatG} g
+- Carbohidrați zi standard: ${exact.carbsHighG} g
+- Carbohidrați zi redusă: ${exact.carbsLowG} g` : '';
+
+      const weightNote = weightDiffers
+        ? `Greutate folosită la calcul: ${weight} kg — spusă de client în conversație. În profilul lui figurează ${profileWeight} kg.`
+        : `Greutate folosită la calcul: ${weight} kg (din profil).`;
+
+      const weightRule = weightDiffers
+        ? `- Clientul a spus o greutate diferită de cea din profil. Toate cifrele de mai sus sunt DEJA calculate pe greutatea spusă de el (${weight} kg). Spune-i într-o singură propoziție scurtă că ai calculat pe ${weight} kg și că în profilul lui figurează ${profileWeight} kg. Nu-i cere să-și actualizeze profilul și nu calcula din nou pe greutatea din profil.`
+        : `- Cifrele de mai sus sunt pentru greutatea din profil (${profileWeight} kg). Dacă clientul pomenește o ALTĂ greutate corporală, iar cifrele de mai sus nu o reflectă, NU calcula tu: cere-i să scrie greutatea și procentul de grăsime într-un singur mesaj, de forma „80 kg, 20%”, și vei primi calculul pe datele lui.`;
 
       nutritionContext = `
 
 =============================================
 NUTRIȚIE CALCULATĂ PENTRU ACEST CLIENT (folosește EXACT aceste cifre — NU calcula tu)
 =============================================
-Greutate: ${userProfile.weight_kg} kg. Cifrele sunt exacte; nu le recalcula, nu le rotunji, nu inventa altele.
+${weightNote} Cifrele sunt exacte; nu le recalcula, nu le rotunji, nu inventa altele.
 
 APORT CALORIC:
 - Zi standard (antrenament): ${cal.highDayKcal} kcal
 - Zi redusă (repaus): ${cal.lowDayKcal} kcal
-- Structură: 5 zile standard + 2 zile reduse pe săptămână.
+- Structură: 5 zile standard + 2 zile reduse pe săptămână.${exactBlock}
 
-MACRONUTRIENȚI după procentul de grăsime corporală (proteinele și grăsimile sunt identice în toate zilele; doar carbohidrații diferă):
+TABEL — MACRONUTRIENȚI după procentul de grăsime corporală (proteinele și grăsimile sunt identice în toate zilele; doar carbohidrații diferă):
 grăsime | masă slabă | proteine | grăsimi | carbo zi standard | carbo zi redusă
 ${rows}
 
-CUM FOLOSEȘTI TABELUL:
-- Clientul declară procentul de grăsime → alege rândul cel mai apropiat și citește valorile. NU interpola, NU calcula.
+CUM FOLOSEȘTI CIFRELE:
+- Există blocul „CALCUL EXACT” → dă cifrele de acolo, NU din tabel.
+- Nu există „CALCUL EXACT”, dar clientul declară procentul de grăsime → alege din tabel rândul cel mai apropiat și citește valorile. NU interpola, NU calcula.
 - Clientul NU a declarat procentul → dă doar aportul caloric (zi standard / zi redusă) și cere-i procentul de grăsime înainte de a da macro. Nu presupune un procent.
-- Cifrele de mai sus sunt pentru greutatea din profil (${userProfile.weight_kg} kg). Dacă clientul menționează în mesaj o ALTĂ greutate, NU recalcula pe ea — spune-i scurt și clar că socotești pe greutatea din profil (${userProfile.weight_kg} kg), iar dacă s-a cântărit și e alta, să-și actualizeze greutatea în profil. Nu ignora diferența în tăcere, dar nu folosi greutatea din mesaj.`;
+${weightRule}`;
     }
   }
 
