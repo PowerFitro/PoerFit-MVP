@@ -311,7 +311,6 @@ PROFILUL CLIENTULUI
 - Greutate: ${userProfile.weight_kg} kg → Target: ${userProfile.target_weight_kg || 'nesetat'} kg
 - Nivel experiență: ${userProfile.experience_level}
 - Echipament: ${userProfile.equipment === 'gym' ? 'sală' : 'aer liber'}
-- Obiectiv: ${userProfile.goal === 'fat_loss' ? 'Pierdere grăsime' : userProfile.goal === 'toning' ? 'Tonifiere' : 'Masă musculară'}
 - Restricții alimentare: ${userProfile.dietary_restrictions?.join(', ') || 'Niciuna'}` : '';
 
   // ============================================
