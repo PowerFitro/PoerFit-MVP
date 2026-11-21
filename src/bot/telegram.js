@@ -758,7 +758,7 @@ function getDayInfo(dayNumber, equipment) {
 // ============================================
 // Decizie: zero AI în welcome ca să eliminăm risc halucinație și clișee
 // motivaționale. Pattern identic cu sendPreProgramMessage — text fix +
-// interpolare 2 variabile (equipment + goal). Aliniat cu D5 (mesaje
+// interpolare 1 variabilă (equipment). Aliniat cu D5 (mesaje
 // motivaționale AI dezactivate) și D11 (plain text peste tot).
 function buildWelcomeMessage(profile) {
   // Echipament: 'gym' = sală, orice altceva (outdoor/home/park) = acasă/parc
@@ -766,18 +766,13 @@ function buildWelcomeMessage(profile) {
     ? 'programul de antrenament la sală'
     : 'programul de antrenament acasă sau în parc';
 
-  // Goal labels — aliniate cu formularul de onboarding
-  // (Pierdere grăsime / Tonifiere / Masă musculară)
-  const goalLabels = {
-    fat_loss: 'pierdere grăsime',
-    toning: 'tonifiere',
-    muscle_gain: 'masă musculară'
-  };
-  const goalLabel = goalLabels[profile.goal] || 'obiectivul tău';
+  // Obiectivul (profile.goal) nu mai apare în mesaj: din 21.11.2026 formularul
+  // nu-l mai cere, iar programul e același pentru toți. Coloana rămâne în bază
+  // pentru profilurile vechi, dar botul nu o mai citește.
 
   return `${profile.full_name}, profil PowerFit conectat.
 
-Înregistrat pentru ${programLabel}, obiectiv: ${goalLabel}.
+Înregistrat pentru ${programLabel}.
 
 Programul începe luni. Până atunci ești în săptămâna de pregătire — primești zilnic mesaje cu pașii necesari: calculul macronutrienților, lista de cumpărături, antrenamentul pregătitor. Parcurge-le. Sunt esențiale pentru prima săptămână.
 
